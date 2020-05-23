@@ -1,0 +1,93 @@
+package pydb.proto;
+
+message Table {
+    optional string name = 1;
+    optional Schema schema = 2;
+
+    optional StringRefMap string_ref_map = 3;
+
+    repeated SubTableId sub_table_id = 4;
+
+    optional int64 index_density = 5 [default = 256];
+}
+
+message StringRefMap {
+    map<uint32, string> mapping = 1;
+}
+
+message ColumnSchema {
+    optional string name = 1;
+    enum Type {
+        FLOAT = 0;
+        DOUBLE = 1;
+        INT32 = 2;
+        INT64 = 3;
+        BYTE = 4;
+        // Note: Current implementation is very inefficient, the total size of unique strings should not exceed 10MB.
+        STRING_REF = 5;
+    };
+    optional Type type = 2;
+    optional uint32 width = 3 [default = 1];
+}
+
+message Schema {
+    // Special time column. Represented by INT64 of width 1.
+    optional string time_column = 1 [default = "t"];
+    // Tag columns, have always implicit ColumnSchema with STRING_REF type and 1 width.
+    repeated string tag_column = 2;
+
+    // Not indexed value columns.
+    repeated ColumnSchema value_column = 3;
+
+}
+
+message SubTableId {
+    optional string id = 1;
+    map<string, uint32> tag = 2;
+}
+
+message SubTable {
+    // Not mutable!
+    optional SubTableId id = 1;
+    optional Index index = 2;
+
+}
+
+message Index {
+    repeated int64 value = 1;
+    repeated int64 pos = 2;
+    optional int64 last_ts = 3;
+    optional uint64 num_rows = 4;
+}
+
+message TimeSelector {
+    optional int64 start = 1;
+    optional bool include_start = 2 [default = true];
+    optional int64 end = 3;
+    optional bool include_end = 4 [default = false];
+}
+
+message TagSelector {
+    optional string name = 1;
+    repeated string value = 2;
+}
+
+message SubTableSelector {
+    // Tag selectors will be ANDed, at most one selector per tag column can be provided. Not providing a selector for
+    // a column means that all the values of a column will be accepted.
+    repeated TagSelector tag_selector = 1;
+}
+
+message Selector {
+    optional SubTableSelector sub_table_selector = 1;
+    optional TimeSelector time_selector = 2;
+    repeated string columns = 3;
+}
+
+message QueryResult {
+    optional int64 num_rows = 1;
+    repeated ColumnSchema column_schema = 2;
+    map<string, bytes> column_binary_data = 3;
+    optional StringRefMap string_ref_map = 4;
+}
+

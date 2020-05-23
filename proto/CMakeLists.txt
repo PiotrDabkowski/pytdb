@@ -1,0 +1,6 @@
+find_package(Protobuf REQUIRED)
+include_directories(${Protobuf_INCLUDE_DIRS})
+protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS table.proto)
+#protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS EXPORT_MACRO DLL_EXPORT foo.proto)
+#protobuf_generate_python(PROTO_PY foo.proto)
+add_library(proto ${PROTO_SRCS} ${PROTO_HDRS})
