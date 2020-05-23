@@ -44,6 +44,8 @@ message Schema {
 message SubTableId {
     optional string id = 1;
     map<string, uint32> tag = 2;
+    // The same as above but in the str format, ordered in sync with tag_columns of the table (one for each column).
+    repeated string str_tag = 3;
 }
 
 message SubTable {

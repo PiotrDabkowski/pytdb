@@ -59,6 +59,10 @@ struct RawColumnData {
   size_t size;
 };
 
+using RawColumns = absl::flat_hash_map<std::string, RawColumnData>;
+using Span = std::pair<size_t, size_t>;
+const Span kEmptySpan = {0, 0};
+
 // First greater element, if any, otherwise returns size.
 size_t c_upper_bound(const int64_t* start, const int64_t* end, int64_t value);
 
@@ -69,8 +73,6 @@ size_t GetTypeSize(proto::ColumnSchema::Type type);
 
 class SubTable {
  public:
-  using Span = std::pair<size_t, size_t>;
-  const Span kEmptySpan = {0, 0};
 
   SubTable(const std::string& root_table_dir, const proto::Table& table_meta, const proto::SubTableId& sub_table_id)
       : table_meta_(table_meta),
@@ -121,6 +123,10 @@ class SubTable {
     GOOGLE_CHECK(meta_.SerializePartialToOstream(&out_meta_file)) << "Could not write to: " << meta_path_;
   }
 
+  const proto::SubTableId& GetId() {
+    return meta_.id();
+  }
+
   void InitSubTable(const proto::SubTableId& sub_table_id) {
     GOOGLE_CHECK(MaybeCreateDir(sub_table_dir_)) << "Failed to create sub table dir " << sub_table_dir_;
     for (const auto&[column, column_meta] : column_meta_) {
@@ -148,7 +154,8 @@ class SubTable {
     }
     for (const auto& tag_column : table_meta_.schema().tag_column()) {
       GOOGLE_CHECK(meta_.id().tag().contains(tag_column))
-              << "Tag for column not found in sub table id specification: " << tag_column << " " << meta_.id().DebugString();
+              << "Tag for column not found in sub table id specification: " << tag_column << " "
+              << meta_.id().DebugString();
       column_meta_[tag_column] = ColumnMeta{
           .type=proto::ColumnSchema::STRING_REF,
           .width=1,
@@ -167,7 +174,7 @@ class SubTable {
     }
   }
 
-  absl::optional<absl::flat_hash_map<std::string, RawColumnData>> Query(const proto::Selector& selector) {
+  absl::optional<RawColumns> Query(const proto::Selector& selector) {
     absl::flat_hash_set<std::string> columns_to_query;
     for (const auto& column_name : selector.columns()) {
       columns_to_query.insert(column_name);
@@ -188,7 +195,7 @@ class SubTable {
       // No results for this query.
       return {};
     }
-    absl::flat_hash_map<std::string, RawColumnData> result;
+    RawColumns result;
     for (const auto& column_name : columns_to_query) {
       result[column_name] = ReadRawColumnSingle(column_meta_.at(column_name), query_span);
     }
@@ -245,7 +252,7 @@ class SubTable {
     if (return_time_column) {
       const size_t num_return_bytes = num_return_rows * sizeof(int64_t);
       char* return_buffer = new char[num_return_bytes];
-      std::memcpy(raw_coarse_time.data + start * sizeof(int64_t), return_buffer, num_return_bytes);
+      std::memcpy(return_buffer, raw_coarse_time.data + start * sizeof(int64_t), num_return_bytes);
       time_column = {
           .data = return_buffer,
           .size = num_return_bytes,
@@ -335,7 +342,7 @@ class SubTable {
     };
   }
 
-  void AppendData(const absl::flat_hash_map<std::string, RawColumnData>& column_data) {
+  void AppendData(const RawColumns& column_data) {
     GOOGLE_CHECK_EQ(column_data.size(), column_meta_.size() - table_meta_.schema().tag_column_size())
             << "Must specify data for all non-tag coulumns!";
     RawColumnData time_column = column_data.at(table_meta_.schema().time_column());
@@ -345,7 +352,6 @@ class SubTable {
     }
     auto* time = reinterpret_cast<int64_t*>(time_column.data);
     int64_t index_density = table_meta_.index_density();
-    int64_t last_ts = index_.last_ts;
     for (size_t i = 0; i < num_extra_rows; ++i) {
       GOOGLE_CHECK_GE(time[i], index_.last_ts) << "Time must be greater or equal to the last inserted timestamp.";
       index_.last_ts = time[i];
@@ -388,30 +394,103 @@ class SubTable {
 
 };
 
-
-
 class Table {
  public:
   Table(std::string table_root_dir, proto::Table table_meta)
       : table_root_dir_(std::move(table_root_dir)), meta_(std::move(table_meta)) {
     sub_tables_.reserve(meta_.sub_table_id_size());
 
-    for (auto& sub_table_id : meta_.sub_table_id()) {
-      sub_tables_.emplace_back(SubTable{table_root_dir_, meta_, sub_table_id});
+    for (const auto& sub_table_id : meta_.sub_table_id()) {
+      AddSubTable(sub_table_id);
+    }
+    non_tag_columns_ = {meta_.schema().time_column()};
+    for (const auto& value_column : meta_.schema().value_column()) {
+      non_tag_columns_.push_back(value_column.name());
     }
   }
 
-  absl::optional<absl::flat_hash_map<std::string, RawColumnData>> Query(const proto::Selector& selector) {
+  absl::optional<RawColumns> Query(const proto::Selector& selector) {
+    std::vector<SubTable*> sub_tables = GetSelectedSubTables(selector.sub_table_selector());
+    if (sub_tables.empty()) {
+      return {};
+    }
+    absl::flat_hash_map<std::string, std::vector<RawColumnData>> sub_results;
+    size_t result_size = 0;
+    for (SubTable* sub_table : sub_tables) {
+      if (result_size > (1UL << 30UL)) {
+        // Bail out if the result is over 1GB, bad query? TODO: Improve error handling in general.
+        break;
+      }
+      auto sub_query_result = sub_table->Query(selector);
+      if (!sub_query_result) {
+        continue;
+      }
+      for (const auto&[column, sub_column_result] : *sub_query_result) {
+        sub_results[column].push_back(sub_column_result);
+        result_size += sub_column_result.size;
+      }
+    }
+    if (result_size == 0) {
+      return {};
+    }
+    RawColumns results;
+    for (const auto&[column, column_sub_results] : sub_results) {
+      results[column] = MergeColumnSubResults(column_sub_results);
+    }
+    return results;
+  }
+
+  bool MaybeAddSubTable(const absl::flat_hash_map<std::string, std::string>& str_tags) {
+    GOOGLE_CHECK_EQ(str_tags.size(), meta_.schema().tag_column_size()) << "Specify all tags for a sub table";
+    const proto::SubTableId id = MakeSubTableId(str_tags);
+    if (sub_table_unique_index_.contains(GetUniqueIndexEntry(id))) {
+      return false;
+    }
+    AddSubTable(id);
+    return true;
+  }
+
+  void AppendData(const RawColumns& column_data) {
+    std::vector<uint32_t> sub_table_selector(meta_.schema().tag_column_size(), kInvalidStrRef);
 
   }
 
-  void MaybeAddSubTable() {
-
+  void AppendRowSpanToSubTable(const RawColumns& column_data, const Span& row_span, SubTable* sub_table) {
+    RawColumns sub_column_data;
+    const size_t total_rows = column_data.at(meta_.schema().time_column()).size / sizeof(int64_t);
+    for (const auto& column_name : non_tag_columns_) {
+      const RawColumnData& full_column = column_data.at(column_name);
+      GOOGLE_CHECK_EQ(full_column.size % total_rows, 0);
+      size_t item_size = full_column.size / total_rows;
+      GOOGLE_CHECK_EQ(item_size % 8, 0) << "Some bad element size...";
+      sub_column_data[column_name] = {
+          .data = full_column.data + row_span.first * item_size,
+          .size = (row_span.second - row_span.first) * item_size,
+      };
+    }
+    sub_table->AppendData(sub_column_data);
   }
 
+  RawColumnData MergeColumnSubResults(const std::vector<RawColumnData>& column_sub_results) {
+    size_t merged_byte_size = 0;
+    for (const auto& column_sub_result : column_sub_results) {
+      merged_byte_size += column_sub_result.size;
+    }
+    GOOGLE_CHECK_GE(merged_byte_size, 0) << "No results to merge.";
+    char* buffer = new char[merged_byte_size];
+    size_t buffer_pos = 0;
+    for (const auto& column_sub_result : column_sub_results) {
+      std::memcpy(buffer + buffer_pos, column_sub_result.data, column_sub_result.size);
+      buffer_pos += column_sub_result.size;
+      delete[] column_sub_result.data;
+    }
+    return {
+        .data = buffer,
+        .size = merged_byte_size,
+    };
+  }
 
-
-    std::vector<int32_t> MintStringRefs(const std::vector<std::string>& strings) {
+  std::vector<int32_t> MintStringRefs(const std::vector<std::string>& strings) {
     std::vector<int32_t> result;
     for (const auto& str : strings) {
       if (inv_string_ref_map_.contains(str)) {
@@ -427,12 +506,87 @@ class Table {
   }
 
  private:
+  proto::SubTableId MakeSubTableId(const absl::flat_hash_map<std::string, std::string>& str_tags) {
+    proto::SubTableId sub_id;
+    std::string id = "sub";
+    for (const auto& tag_column : meta_.schema().tag_column()) {
+      absl::StrAppend(&id, ",", tag_column, "=", str_tags.at(tag_column));
+      (*sub_id.mutable_tag())[tag_column] = MintStringRefs({str_tags.at(tag_column)}).at(0);
+      sub_id.add_str_tag(str_tags.at(tag_column));
+    }
+    return sub_id;
+  }
+
+  void AddSubTable(const proto::SubTableId& id) {
+    sub_tables_.push_back(absl::make_unique<SubTable>(table_root_dir_, meta_, id));
+    IndexSubTable(sub_tables_.back().get());
+  }
+
+  absl::flat_hash_map<std::string, uint32_t> ConvertStrTags(const absl::flat_hash_map<std::string,
+                                                                                      std::string>& str_tags) {
+    absl::flat_hash_map<std::string, uint32_t> result;
+    // Cheap enough to do it stupidly rather than in batch.
+    for (const auto&[tag, value] : str_tags) {
+      result[tag] = MintStringRefs({tag}).at(0);
+    }
+    return result;
+  }
+
+  std::string GetUniqueIndexEntry(const proto::SubTableId& sub_table_id) {
+    std::vector<uint32_t> tag_str_refs;
+    for (const auto& tag_column : meta_.schema().tag_column()) {
+      tag_str_refs.push_back(sub_table_id.tag().at(tag_column));
+    }
+    return GetUniqueIndexEntry(tag_str_refs);
+  }
+
+  std::string GetUniqueIndexEntry(const std::vector<uint32_t>& tag_str_refs) {
+    std::string entry;
+    for (uint32_t str_ref : tag_str_refs) {
+      GOOGLE_CHECK_NE(str_ref, kInvalidStrRef);
+      absl::StrAppend(&entry, ",", str_ref);
+    }
+    return entry;
+  }
+
+  std::vector<SubTable*> GetSelectedSubTables(const proto::SubTableSelector& selector) {
+    if (selector.tag_selector().empty()) {
+      // All sub tables.
+      std::vector<SubTable*> all_sub_tables;
+      for (auto& sub_table : sub_tables_) {
+        all_sub_tables.push_back(sub_table.get());
+      }
+      return all_sub_tables;
+    }
+    GOOGLE_CHECK(false) << "Selecting sub tables not implemented yet.";
+    return {};
+  }
+
+  void IndexSubTable(SubTable* sub_table) {
+    const std::string entry = GetUniqueIndexEntry(sub_table->GetId());
+    GOOGLE_CHECK(!sub_table_unique_index_.contains(entry))
+            << "Indexed table already exists: " << sub_table->GetId().id();
+    sub_table_unique_index_[entry] = sub_table;
+
+    for (int i = 0; i < meta_.schema().tag_column_size(); ++i) {
+      sub_table_index_[{meta_.schema().tag_column(i), sub_table->GetId().str_tag(i)}].push_back(sub_table);
+    }
+  }
+
   const std::string table_root_dir_;
   proto::Table meta_;
 
-  std::vector<SubTable> sub_tables_;
+  std::vector<std::unique_ptr<SubTable>> sub_tables_;
   absl::flat_hash_map<int32_t, std::string> string_ref_map_;
   absl::flat_hash_map<std::string, int32_t> inv_string_ref_map_;
+  std::vector<std::string> non_tag_columns_;
+
+
+  // Index by {tag_column_name, tag_value}  -> sub tables .
+  absl::flat_hash_map<std::pair<std::string, std::string>, std::vector<SubTable*>> sub_table_index_;
+  // Index by uint32 comma separated tags (in order of tag columns)  -> sub table
+  // A bit stupid, but only relevant for writes.
+  absl::flat_hash_map<std::string, SubTable*> sub_table_unique_index_;
 
 //  std::vector<SubTable> sub_tables_;
 
