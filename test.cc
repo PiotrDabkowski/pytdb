@@ -104,7 +104,8 @@ std::vector<T> ToVector(RawColumnData* raw_column) {
 class TableTest : public testing::Test {
  protected:
   void SetUp() override {
-    std::filesystem::path tmp_dir_path{std::filesystem::temp_directory_path() /= std::tmpnam(nullptr)};
+    std::filesystem::path
+        tmp_dir_path{std::filesystem::temp_directory_path() /= std::tmpnam(nullptr)};
     EXPECT_TRUE(std::filesystem::create_directories(tmp_dir_path));
     root_dir_ = tmp_dir_path.string();
 //    root_dir_ = "/Users/piter/CLionProjects/PyDB/mock";
@@ -112,11 +113,13 @@ class TableTest : public testing::Test {
   }
 
   void TearDown() override {
-    std::filesystem::remove_all(root_dir_ );
+    std::filesystem::remove_all(root_dir_);
   }
 
-  template <typename T>
-  void CheckColumn(RawColumns& columns, const std::string& column_name, const std::vector<T>& expected) {
+  template<typename T>
+  void CheckColumn(RawColumns& columns,
+                   const std::string& column_name,
+                   const std::vector<T>& expected) {
     EXPECT_TRUE(columns.contains(column_name)) << column_name;
     auto actual_vec = ToVector<T>(&columns.at(column_name));
     EXPECT_EQ(actual_vec.size(), expected.size()) << column_name;
@@ -127,7 +130,7 @@ class TableTest : public testing::Test {
 
 };
 
-template <typename T>
+template<typename T>
 std::vector<T> Range(int32_t start, int32_t end) {
   std::vector<T> res;
   EXPECT_GE(end, start);
@@ -151,7 +154,7 @@ TEST_F(TableTest, SubTableWorkflow) {
   Table table(root_dir_, config);
   auto sub_id = table.MakeSubTableId({{"s", "GOOG"}});
   EXPECT_EQ(sub_id.id(), "sub,s=GOOG");
-  EXPECT_EQ(sub_id.tag().at("s"), 11);
+  EXPECT_EQ(sub_id.tag().at("s"), 1);
   EXPECT_EQ(sub_id.str_tag(0), "GOOG");
 
   SubTable sub(root_dir_, config, sub_id);
@@ -171,13 +174,14 @@ TEST_F(TableTest, SubTableWorkflow) {
   EXPECT_EQ(sub.GetIndex().num_rows, rows);
 
   // Throw on out of order data.
-  EXPECT_THROW(sub.AppendData({{"t", FromVector(&times)}, {"v", FromVector(&values)}}), std::invalid_argument);
+  EXPECT_THROW(sub.AppendData({{"t", FromVector(&times)}, {"v", FromVector(&values)}}),
+               std::invalid_argument);
 
   auto result = sub.Query(sel);
   EXPECT_TRUE(result);
   EXPECT_EQ(result->size(), 2);
   CheckColumn(*result, "t", times);
-  CheckColumn(*result, "s", std::vector<uint32_t>(rows, 11));
+  CheckColumn(*result, "s", std::vector<uint32_t>(rows, 1));
 
   size_t new_rows = 1000;
   auto times2 = Range<int64_t>(rows, rows + new_rows);
@@ -193,7 +197,7 @@ TEST_F(TableTest, SubTableWorkflow) {
   EXPECT_TRUE(result);
   EXPECT_EQ(result->size(), 2);
   CheckColumn(*result, "t", Range<int64_t>(0, rows));
-  CheckColumn(*result, "s", std::vector<uint32_t>(rows, 11));
+  CheckColumn(*result, "s", std::vector<uint32_t>(rows, 1));
 
   // Read the table from scratch and check it still works.
   SubTable sub2(root_dir_, config, sub_id);
@@ -213,7 +217,7 @@ TEST_F(TableTest, SubTableWorkflow) {
     EXPECT_TRUE(q_res);
     EXPECT_EQ(q_res->size(), 3);
     this->CheckColumn(*q_res, "t", Range<int64_t>(start, end));
-    this->CheckColumn(*q_res, "s", std::vector<uint32_t>(end - start, 11));
+    this->CheckColumn(*q_res, "s", std::vector<uint32_t>(end - start, 1));
     this->CheckColumn(*q_res, "v", Range<float>(start, end));
   };
 
@@ -331,6 +335,62 @@ TEST_F(TableTest, SubTableWorkflow) {
   verify(sel, 1600, 2000);
 }
 
+TEST_F(TableTest, TableWorkflow) {
+  pydb::proto::Table config;
+  config.set_index_density(256);
+
+  auto* schema = config.mutable_schema();
+  schema->set_time_column("t");
+  schema->add_tag_column("s");
+  schema->add_tag_column("c");
+  auto* vc = schema->add_value_column();
+  vc->set_name("v");
+  vc->set_type(pydb::proto::ColumnSchema::FLOAT);
+
+  Table tmp_table(root_dir_, config);
+  EXPECT_EQ(tmp_table.GetMeta().SerializeAsString(), config.SerializeAsString());
+  Table tmp_table2(root_dir_);
+  EXPECT_EQ(tmp_table2.GetMeta().SerializeAsString(), tmp_table.GetMeta().SerializeAsString());
+  tmp_table2.MintStringRefs({"hello", "world", "this"});
+  EXPECT_EQ(*tmp_table2.ResolveStringRefs({1})[0], "hello");
+
+  tmp_table2.MintStringRefs({"is", "hello", "world", "great"});
+  EXPECT_THAT(tmp_table2
+                  .MintStringRefs({"is", "great", "hello", "xx", "is", "hello", "GOOG", "PL"}),
+              testing::ElementsAre(4, 5, 1, 6, 4, 1, 7, 8));
+  EXPECT_EQ(*tmp_table2.ResolveStringRefs({5})[0], "great");
+
+  Table tmp_table3(root_dir_);
+  EXPECT_EQ(*tmp_table3.ResolveStringRefs({5, 1})[0], "great");
+  EXPECT_EQ(*tmp_table3.ResolveStringRefs({5, 1})[1], "hello");
+  EXPECT_THAT(tmp_table3.MintStringRefs({"is", "great", "hello", "xx", "is", "hello", "FB"}),
+              testing::ElementsAre(4, 5, 1, 6, 4, 1, 9));
+
+  std::vector<int64_t> t_ = {1,2,3};
+  std::vector<StrRef> s_ = {1,1,1};
+  std::vector<StrRef> c_ = {2,2,2};
+  std::vector<float> v_ = {3,2,1};
+  auto to_cols = [&t_, &s_, &c_, &v_]() {
+    return RawColumns({
+      {"t", FromVector(&t_)},
+      {"s", FromVector(&s_)},
+      {"c", FromVector(&c_)},
+      {"v", FromVector(&v_)},
+    });
+  };
+
+  tmp_table3.AppendData(to_cols());
+
+  Table tmp_table4(root_dir_);
+  proto::Selector sel;
+  sel.add_column("t");
+  sel.add_column("v");
+  auto q_res = tmp_table4.Query(sel);
+  EXPECT_TRUE(q_res);
+  EXPECT_EQ(q_res->size(), 2);
+  this->CheckColumn(*q_res, "t", t_);
+  this->CheckColumn(*q_res, "v", v_);
+}
 
 }  // namespace
 }  // pydb

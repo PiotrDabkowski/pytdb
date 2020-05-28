@@ -130,6 +130,7 @@ class SubTable {
 
   void WriteMeta() {
     std::ofstream out_meta_file(meta_path_, std::ofstream::out | std::ofstream::binary);
+    GOOGLE_CHECK(out_meta_file) << "Could not open path: " << meta_path_;
     GOOGLE_CHECK(meta_.SerializePartialToOstream(&out_meta_file))
             << "Could not write to: " << meta_path_;
   }
@@ -436,6 +437,7 @@ class Table {
   Table(std::string table_root_dir, const absl::optional<proto::Table>& table_meta)
       : table_root_dir_(std::move(table_root_dir)),
         meta_path_(absl::StrCat(table_root_dir_, "/", "META.pb")) {
+    MaybeCreateDir(table_root_dir_);
     sub_tables_.reserve(meta_.sub_table_id_size());
     if (table_meta) {
       meta_ = *table_meta;
@@ -452,6 +454,7 @@ class Table {
             meta_path_));
       }
     }
+    LoadStringRefs();
     for (const auto& sub_table_id : meta_.sub_table_id()) {
       AddSubTable(sub_table_id);
     }
@@ -461,8 +464,12 @@ class Table {
     }
   }
 
+  const proto::Table& GetMeta() {
+    return meta_;
+  }
   void WriteMeta() {
     std::ofstream out_meta_file(meta_path_, std::ofstream::out | std::ofstream::binary);
+    GOOGLE_CHECK(out_meta_file) << "Could not open path: " << meta_path_;
     GOOGLE_CHECK(meta_.SerializePartialToOstream(&out_meta_file))
             << "Could not write meta to: " << meta_path_;
   }
@@ -510,7 +517,7 @@ class Table {
 
   SubTable* GetOrCreateSubTable(std::vector<StrRef> sub_table_selector) {
     GOOGLE_CHECK_EQ(sub_table_selector.size(), meta_.schema().tag_column_size())
-            << "Bad selector, must be equal to number of tag columns in the same order.";
+            << "Bad selector, must be equal to number of tag columns in the same order." << sub_table_selector.size();
     const std::vector<const std::string*> resolved_selector = ResolveStringRefs(sub_table_selector);
     GOOGLE_CHECK_EQ(resolved_selector.size(), sub_table_selector.size());
     absl::flat_hash_map<std::string, std::string> str_tags;
@@ -553,8 +560,7 @@ class Table {
       last_sub_table_selector.push_back(tag_cols.back()[0]);
     }
     GOOGLE_CHECK_EQ(last_sub_table_selector.size(), tag_cols.size());
-    std::vector<StrRef> sub_table_selector;
-    sub_table_selector.reserve(tag_cols.size());
+    std::vector<StrRef> sub_table_selector(tag_cols.size(), kInvalidStrRef);
     for (size_t row = 0; row < total_rows; ++row) {
       for (size_t tag_column_id = 0; tag_column_id < tag_cols.size(); ++tag_column_id) {
         sub_table_selector[tag_column_id] = tag_cols[tag_column_id][row];
@@ -579,7 +585,7 @@ class Table {
       const RawColumnData& full_column = column_data.at(column_name);
       GOOGLE_CHECK_EQ(full_column.size % total_rows, 0);
       size_t item_size = full_column.size / total_rows;
-      GOOGLE_CHECK_EQ(item_size % 8, 0) << "Some bad element size...";
+      GOOGLE_CHECK_EQ(item_size % 4, 0) << absl::StrFormat("Bad element size (%d) column %s, columns size %d, total_rows %d", item_size, column_name, full_column.size, total_rows);
       sub_column_data[column_name] = {
           .data = full_column.data + row_span.first * item_size,
           .size = (row_span.second - row_span.first) * item_size,
@@ -607,17 +613,39 @@ class Table {
     };
   }
 
+  void LoadStringRefs() {
+    GOOGLE_CHECK(string_ref_map_.empty()) << "Load string refs once at the init.";
+    for (const auto& pair : meta_.string_ref_map().mapping()) {
+      string_ref_map_[pair.first] = pair.second;
+      inv_string_ref_map_[pair.second] = pair.first;
+    }
+  }
+
+  void DumpStringRefs() {
+    meta_.mutable_string_ref_map()->clear_mapping();
+    for (const auto& pair: string_ref_map_) {
+      (*meta_.mutable_string_ref_map()->mutable_mapping())[pair.first] = pair.second;
+    }
+    WriteMeta();
+  }
+
   std::vector<StrRef> MintStringRefs(const std::vector<std::string>& strings) {
     std::vector<StrRef> result;
+    bool did_mint = false;
     for (const auto& str : strings) {
       if (inv_string_ref_map_.contains(str)) {
         result.push_back(inv_string_ref_map_[str]);
       } else {
-        StrRef mint = string_ref_map_.size() + 11;
+        StrRef mint = string_ref_map_.size() + 1;
         result.push_back(mint);
         inv_string_ref_map_[str] = mint;
         string_ref_map_[mint] = str;
+        did_mint = true;
       }
+    }
+    if (did_mint) {
+      // VERY INEFFICIENT! Todo: append new references instead
+      DumpStringRefs();
     }
     return result;
   }
