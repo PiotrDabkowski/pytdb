@@ -107,12 +107,12 @@ class TableTest : public testing::Test {
     std::filesystem::path tmp_dir_path{std::filesystem::temp_directory_path() /= std::tmpnam(nullptr)};
     EXPECT_TRUE(std::filesystem::create_directories(tmp_dir_path));
     root_dir_ = tmp_dir_path.string();
-    root_dir_ = "/Users/piter/CLionProjects/PyDB/mock";
+//    root_dir_ = "/Users/piter/CLionProjects/PyDB/mock";
     std::filesystem::remove_all(root_dir_);
   }
 
   void TearDown() override {
-//    std::filesystem::remove_all(root_dir_);
+    std::filesystem::remove_all(root_dir_ );
   }
 
   template <typename T>
