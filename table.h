@@ -11,6 +11,7 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/strings/str_format.h"
 #include "spdlog/spdlog.h"
 #include "proto/table.pb.h"
 
@@ -54,6 +55,7 @@ struct ColumnMeta {
   uint32_t tag_str_ref = kInvalidStrRef;
 };
 
+
 struct RawColumnData {
   char* data;
   size_t size;
@@ -77,7 +79,7 @@ class SubTable {
   SubTable(const std::string& root_table_dir, const proto::Table& table_meta, const proto::SubTableId& sub_table_id)
       : table_meta_(table_meta),
         sub_table_dir_(absl::StrCat(root_table_dir, "/", sub_table_id.id())),
-        meta_path_(absl::StrCat(sub_table_dir_, "/", "META_.pb")) {
+        meta_path_(absl::StrCat(sub_table_dir_, "/", "META.pb")) {
     InitSubTable(sub_table_id);
     ExtractColumnMeta();
   };
@@ -92,6 +94,7 @@ class SubTable {
     // Initialize the table - meta file does not exist yet.
     *meta_.mutable_id() = sub_table_id;
     WriteMeta();
+    std::filesystem::temp_directory_path();
   }
 
   void InitIndex() {
@@ -107,6 +110,10 @@ class SubTable {
     };
     index_.value = {index.value().begin(), index.value().end()};
     index_.pos = {index.pos().begin(), index.pos().end()};
+  }
+
+  Index GetIndex() {
+    return index_;
   }
 
   void UpdateMeta() {
@@ -175,8 +182,9 @@ class SubTable {
   }
 
   absl::optional<RawColumns> Query(const proto::Selector& selector) {
+    spdlog::info("New query arrived...");
     absl::flat_hash_set<std::string> columns_to_query;
-    for (const auto& column_name : selector.columns()) {
+    for (const auto& column_name : selector.column()) {
       columns_to_query.insert(column_name);
     }
     const std::string& time_column_name = table_meta_.schema().time_column();
@@ -202,6 +210,7 @@ class SubTable {
     if (return_time_column) {
       result[time_column_name] = time_column_data;
     }
+    spdlog::info("Done, query had results.");
     return result;
   }
 
@@ -216,6 +225,7 @@ class SubTable {
         raw_coarse_time = ReadRawColumnSingle(column_meta_.at(table_meta_.schema().time_column()), coarse_span);
     auto* coarse_time = reinterpret_cast<int64_t*>(raw_coarse_time.data);
     const size_t num_rows = coarse_span.second - coarse_span.first;
+    GOOGLE_CHECK_EQ(raw_coarse_time.size, sizeof(int64_t) * num_rows);
 
     ssize_t start;
     if (time_selector.has_start()) {
@@ -224,14 +234,16 @@ class SubTable {
       } else {
         start = c_upper_bound(coarse_time, coarse_time + num_rows, time_selector.start());
       }
+      if (start == num_rows) {
+        delete[] raw_coarse_time.data;
+        return {kEmptySpan, {}};
+      }
+      start += coarse_span.first;
     } else {
       spdlog::error("No query start!");
       start = 0;
     }
-    if (start == num_rows) {
-      delete[] raw_coarse_time.data;
-      return {kEmptySpan, {}};
-    }
+
     ssize_t end;
     if (time_selector.has_end()) {
       if (time_selector.include_end()) {
@@ -239,6 +251,7 @@ class SubTable {
       } else {
         end = c_lower_bound(coarse_time, coarse_time + num_rows, time_selector.end());
       }
+      end += coarse_span.first;
     } else {
       end = index_.num_rows;
     }
@@ -252,7 +265,7 @@ class SubTable {
     if (return_time_column) {
       const size_t num_return_bytes = num_return_rows * sizeof(int64_t);
       char* return_buffer = new char[num_return_bytes];
-      std::memcpy(return_buffer, raw_coarse_time.data + start * sizeof(int64_t), num_return_bytes);
+      std::memcpy(return_buffer, raw_coarse_time.data + (start - coarse_span.first) * sizeof(int64_t), num_return_bytes);
       time_column = {
           .data = return_buffer,
           .size = num_return_bytes,
@@ -343,6 +356,7 @@ class SubTable {
   }
 
   void AppendData(const RawColumns& column_data) {
+    // This condition should be checked at the Table level and not check-fail if not satisfied (but rather throw).
     GOOGLE_CHECK_EQ(column_data.size(), column_meta_.size() - table_meta_.schema().tag_column_size())
             << "Must specify data for all non-tag coulumns!";
     RawColumnData time_column = column_data.at(table_meta_.schema().time_column());
@@ -353,7 +367,9 @@ class SubTable {
     auto* time = reinterpret_cast<int64_t*>(time_column.data);
     int64_t index_density = table_meta_.index_density();
     for (size_t i = 0; i < num_extra_rows; ++i) {
-      GOOGLE_CHECK_GE(time[i], index_.last_ts) << "Time must be greater or equal to the last inserted timestamp.";
+      if (time[i] < index_.last_ts) {
+        throw std::invalid_argument(absl::StrFormat("Out of range timestamp for sub table %s, latest inserted was %d, tried to insert %d", meta_.id().id(), index_.last_ts, time[i]));
+      }
       index_.last_ts = time[i];
       if (index_.num_rows % index_density == 0) {
         // Add entry to the index.
@@ -505,7 +521,6 @@ class Table {
     return result;
   }
 
- private:
   proto::SubTableId MakeSubTableId(const absl::flat_hash_map<std::string, std::string>& str_tags) {
     proto::SubTableId sub_id;
     std::string id = "sub";
@@ -514,8 +529,12 @@ class Table {
       (*sub_id.mutable_tag())[tag_column] = MintStringRefs({str_tags.at(tag_column)}).at(0);
       sub_id.add_str_tag(str_tags.at(tag_column));
     }
+    sub_id.set_id(id);
     return sub_id;
   }
+
+ private:
+
 
   void AddSubTable(const proto::SubTableId& id) {
     sub_tables_.push_back(absl::make_unique<SubTable>(table_root_dir_, meta_, id));

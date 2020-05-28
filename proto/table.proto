@@ -83,7 +83,7 @@ message SubTableSelector {
 message Selector {
     optional SubTableSelector sub_table_selector = 1;
     optional TimeSelector time_selector = 2;
-    repeated string columns = 3;
+    repeated string column = 3;
 }
 
 message QueryResult {

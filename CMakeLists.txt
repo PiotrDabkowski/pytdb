@@ -12,7 +12,7 @@ add_subdirectory(googletest)
 
 
 add_library(table_lib table.cc table.h)
-target_link_libraries(table_lib proto ${Protobuf_LIBRARIES} absl::strings absl::flat_hash_map spdlog::spdlog)
+target_link_libraries(table_lib proto ${Protobuf_LIBRARIES} absl::strings absl::str_format absl::flat_hash_map spdlog::spdlog)
 
 find_package(spdlog REQUIRED)
 find_package(Protobuf REQUIRED)
