@@ -374,11 +374,11 @@ TEST_F(TableTest, TableWorkflow) {
 
   auto to_cols = [](TableData* d) {
     return RawColumns({
-      {"t", FromVector(&d->t)},
-      {"s", FromVector(&d->s)},
-      {"c", FromVector(&d->c)},
-      {"v", FromVector(&d->v)},
-    });
+                          {"t", FromVector(&d->t)},
+                          {"s", FromVector(&d->s)},
+                          {"c", FromVector(&d->c)},
+                          {"v", FromVector(&d->v)},
+                      });
   };
   auto check_res = [this](absl::optional<RawColumns> q_res, absl::optional<TableData> d) {
     if (!d) {
@@ -392,13 +392,12 @@ TEST_F(TableTest, TableWorkflow) {
     this->CheckColumn(*q_res, "s", d->s);
     this->CheckColumn(*q_res, "c", d->c);
 
-
   };
   TableData sub1_part1 = {
-      .t = {1,2,3},
-      .s = {1,1,1},
-      .c = {2,2,2},
-      .v = {3,2,1},
+      .t = {1, 2, 3},
+      .s = {1, 1, 1},
+      .c = {2, 2, 2},
+      .v = {3, 2, 1},
   };
   tmp_table3.AppendData(to_cols(&sub1_part1));
 
@@ -412,65 +411,79 @@ TEST_F(TableTest, TableWorkflow) {
   check_res(tmp_table4.Query(sel), sub1_part1);
 
   TableData sub1_part2 = {
-      .t = {4,5,6},
-      .s = {1,1,1},
-      .c = {2,2,2},
-      .v = {3,5,1},
+      .t = {4, 5, 6},
+      .s = {1, 1, 1},
+      .c = {2, 2, 2},
+      .v = {3, 5, 1},
   };
   tmp_table4.AppendData(to_cols(&sub1_part2));
   check_res(tmp_table4.Query(sel), TableData{
-    .t = {1,2,3,4,5,6},
-    .s = {1,1,1,1,1,1},
-    .c = {2,2,2,2,2,2},
-    .v = {3,2,1,3,5,1},
+      .t = {1, 2, 3, 4, 5, 6},
+      .s = {1, 1, 1, 1, 1, 1},
+      .c = {2, 2, 2, 2, 2, 2},
+      .v = {3, 2, 1, 3, 5, 1},
   });
 
   TableData sub12_part31 = {
-      .t = {11,33,44},
-      .s = {1,2,2},
-      .c = {2,3,3},
-      .v = {44,55,66},
+      .t = {11, 33, 44},
+      .s = {1, 2, 2},
+      .c = {2, 3, 3},
+      .v = {44, 55, 66},
   };
 
   tmp_table4.AppendData(to_cols(&sub12_part31));
   check_res(tmp_table4.Query(sel), TableData{
-      .t = {33,44,1,2,3,4,5,6,11},
-      .s = {2,2,1,1,1,1,1,1,1},
-      .c = {3,3,2,2,2,2,2,2,2},
-      .v = {55,66,3,2,1,3,5,1,44},
+      .t = {33, 44, 1, 2, 3, 4, 5, 6, 11},
+      .s = {2, 2, 1, 1, 1, 1, 1, 1, 1},
+      .c = {3, 3, 2, 2, 2, 2, 2, 2, 2},
+      .v = {55, 66, 3, 2, 1, 3, 5, 1, 44},
   });
 
   Table tmp_table5(root_dir_);
   check_res(tmp_table5.Query(sel), TableData{
-      .t = {33,44,1,2,3,4,5,6,11},
-      .s = {2,2,1,1,1,1,1,1,1},
-      .c = {3,3,2,2,2,2,2,2,2},
-      .v = {55,66,3,2,1,3,5,1,44},
+      .t = {33, 44, 1, 2, 3, 4, 5, 6, 11},
+      .s = {2, 2, 1, 1, 1, 1, 1, 1, 1},
+      .c = {3, 3, 2, 2, 2, 2, 2, 2, 2},
+      .v = {55, 66, 3, 2, 1, 3, 5, 1, 44},
   });
-  auto* t_sel = sel.mutable_sub_table_selector()->add_tag_selector();
-  t_sel->set_name("s");
-  t_sel->add_value("a world");
+  auto* tag_sel = sel.mutable_sub_table_selector()->add_tag_selector();
+  tag_sel->set_name("s");
+  tag_sel->add_value("a world");
   check_res(tmp_table5.Query(sel), TableData{
-      .t = {33,44},
-      .s = {2,2},
-      .c = {3,3},
-      .v = {55,66},
+      .t = {33, 44},
+      .s = {2, 2},
+      .c = {3, 3},
+      .v = {55, 66},
   });
-  t_sel->add_value("giga");
+  tag_sel->add_value("giga");
   check_res(tmp_table5.Query(sel), TableData{
-      .t = {33,44},
-      .s = {2,2},
-      .c = {3,3},
-      .v = {55,66},
+      .t = {33, 44},
+      .s = {2, 2},
+      .c = {3, 3},
+      .v = {55, 66},
   });
-  t_sel->add_value("hello");
+  tag_sel->add_value("hello");
   check_res(tmp_table5.Query(sel), TableData{
-      .t = {33,44,1,2,3,4,5,6,11},
-      .s = {2,2,1,1,1,1,1,1,1},
-      .c = {3,3,2,2,2,2,2,2,2},
-      .v = {55,66,3,2,1,3,5,1,44},
+      .t = {33, 44, 1, 2, 3, 4, 5, 6, 11},
+      .s = {2, 2, 1, 1, 1, 1, 1, 1, 1},
+      .c = {3, 3, 2, 2, 2, 2, 2, 2, 2},
+      .v = {55, 66, 3, 2, 1, 3, 5, 1, 44},
   });
+
+  auto* time_sel = sel.mutable_time_selector();
+  time_sel->set_start(2);
+  time_sel->set_end(4);
+  time_sel->set_include_end(true);
+
+  check_res(tmp_table5.Query(sel), TableData{
+      .t = {2,3,4},
+      .s = {1,1,1},
+      .c = {2,2,2},
+      .v = {2,1,3},
+  });
+
 }
+
 
 }  // namespace
 }  // pydb
