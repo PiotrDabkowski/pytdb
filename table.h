@@ -135,7 +135,7 @@ class SubTable {
             << "Could not write to: " << meta_path_;
   }
 
-  const proto::SubTableId& GetId() {
+  const proto::SubTableId& GetId() const {
     return meta_.id();
   }
 
@@ -454,13 +454,18 @@ class Table {
             meta_path_));
       }
     }
+    spdlog::info(meta_.DebugString());
+
     LoadStringRefs();
     for (const auto& sub_table_id : meta_.sub_table_id()) {
-      AddSubTable(sub_table_id);
+      MountSubTable(sub_table_id);
     }
     non_tag_columns_ = {meta_.schema().time_column()};
     for (const auto& value_column : meta_.schema().value_column()) {
       non_tag_columns_.push_back(value_column.name());
+    }
+    for (size_t i = 0; i < meta_.schema().tag_column_size(); ++i) {
+      tag_column_to_order_[meta_.schema().tag_column(i)] = i;
     }
   }
 
@@ -530,7 +535,8 @@ class Table {
     const proto::SubTableId id = MakeSubTableId(str_tags);
     const auto index_entry = GetUniqueIndexEntry(id);
     if (!sub_table_unique_index_.contains(index_entry)) {
-      AddSubTable(id);
+      *meta_.add_sub_table_id() = id;
+      MountSubTable(id);
       GOOGLE_CHECK(sub_table_unique_index_.contains(index_entry));
       WriteMeta();
     }
@@ -676,8 +682,7 @@ class Table {
 
  private:
 
-  void AddSubTable(const proto::SubTableId& id) {
-    *meta_.add_sub_table_id() = id;
+  void MountSubTable(const proto::SubTableId& id) {
     sub_tables_.push_back(absl::make_unique<SubTable>(table_root_dir_, meta_, id));
     IndexSubTable(sub_tables_.back().get());
   }
@@ -730,10 +735,32 @@ class Table {
       }
       selection = new_selection;
     }
-    return {selection.begin(), selection.end()};
+    std::vector<SubTable*> result(selection.begin(), selection.end());
+
+    if (!selector.tag_order().empty()) {
+      std::vector<size_t> order;
+      for (const auto& order_tag : selector.tag_order()) {
+        order.push_back(tag_column_to_order_.at(order_tag));
+      }
+      auto cmp = [ &order] (const SubTable* a, const SubTable* b) {
+        for (size_t tag_col : order) {
+          const std::string a_s = a->GetId().str_tag(tag_col);
+          const std::string b_s = b->GetId().str_tag(tag_col);
+          if (a_s == b_s) {
+            continue;
+          }
+          return a_s < b_s;
+        }
+        // Elements equal.
+        return false;
+      };
+      std::sort(result.begin(), result.end(), cmp);
+    }
+    return result;
   }
 
   void IndexSubTable(SubTable* sub_table) {
+    spdlog::info("Indexing table {}", sub_table->GetId().id());
     const std::string entry = GetUniqueIndexEntry(sub_table->GetId());
     GOOGLE_CHECK(!sub_table_unique_index_.contains(entry))
             << "Indexed table already exists: " << sub_table->GetId().id();
@@ -754,6 +781,7 @@ class Table {
   absl::node_hash_map<StrRef, std::string> string_ref_map_;
   absl::flat_hash_map<std::string, StrRef> inv_string_ref_map_;
   std::vector<std::string> non_tag_columns_;
+  absl::flat_hash_map<std::string, size_t> tag_column_to_order_;
 
   // Index by {tag_column_name, tag_value}  -> sub tables .
   absl::flat_hash_map<std::pair<std::string, std::string>, std::vector<SubTable*>> sub_table_index_;

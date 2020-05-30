@@ -78,6 +78,7 @@ message SubTableSelector {
     // Tag selectors will be ANDed, at most one selector per tag column can be provided. Not providing a selector for
     // a column means that all the values of a column will be accepted.
     repeated TagSelector tag_selector = 1;
+    repeated string tag_order = 4;
 }
 
 message Selector {

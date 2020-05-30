@@ -351,10 +351,10 @@ TEST_F(TableTest, TableWorkflow) {
   EXPECT_EQ(tmp_table.GetMeta().SerializeAsString(), config.SerializeAsString());
   Table tmp_table2(root_dir_);
   EXPECT_EQ(tmp_table2.GetMeta().SerializeAsString(), tmp_table.GetMeta().SerializeAsString());
-  tmp_table2.MintStringRefs({"hello", "world", "this"});
+  tmp_table2.MintStringRefs({"hello", "a world", "this"});
   EXPECT_EQ(*tmp_table2.ResolveStringRefs({1})[0], "hello");
 
-  tmp_table2.MintStringRefs({"is", "hello", "world", "great"});
+  tmp_table2.MintStringRefs({"is", "hello", "a world", "great"});
   EXPECT_THAT(tmp_table2
                   .MintStringRefs({"is", "great", "hello", "xx", "is", "hello", "GOOG", "PL"}),
               testing::ElementsAre(4, 5, 1, 6, 4, 1, 7, 8));
@@ -365,31 +365,111 @@ TEST_F(TableTest, TableWorkflow) {
   EXPECT_EQ(*tmp_table3.ResolveStringRefs({5, 1})[1], "hello");
   EXPECT_THAT(tmp_table3.MintStringRefs({"is", "great", "hello", "xx", "is", "hello", "FB"}),
               testing::ElementsAre(4, 5, 1, 6, 4, 1, 9));
-
-  std::vector<int64_t> t_ = {1,2,3};
-  std::vector<StrRef> s_ = {1,1,1};
-  std::vector<StrRef> c_ = {2,2,2};
-  std::vector<float> v_ = {3,2,1};
-  auto to_cols = [&t_, &s_, &c_, &v_]() {
-    return RawColumns({
-      {"t", FromVector(&t_)},
-      {"s", FromVector(&s_)},
-      {"c", FromVector(&c_)},
-      {"v", FromVector(&v_)},
-    });
+  struct TableData {
+    std::vector<int64_t> t;
+    std::vector<StrRef> s;
+    std::vector<StrRef> c;
+    std::vector<float> v;
   };
 
-  tmp_table3.AppendData(to_cols());
+  auto to_cols = [](TableData* d) {
+    return RawColumns({
+      {"t", FromVector(&d->t)},
+      {"s", FromVector(&d->s)},
+      {"c", FromVector(&d->c)},
+      {"v", FromVector(&d->v)},
+    });
+  };
+  auto check_res = [this](absl::optional<RawColumns> q_res, absl::optional<TableData> d) {
+    if (!d) {
+      EXPECT_FALSE(q_res);
+      return;
+    }
+    EXPECT_TRUE(q_res);
+    EXPECT_EQ(q_res->size(), 4);
+    this->CheckColumn(*q_res, "t", d->t);
+    this->CheckColumn(*q_res, "v", d->v);
+    this->CheckColumn(*q_res, "s", d->s);
+    this->CheckColumn(*q_res, "c", d->c);
+
+
+  };
+  TableData sub1_part1 = {
+      .t = {1,2,3},
+      .s = {1,1,1},
+      .c = {2,2,2},
+      .v = {3,2,1},
+  };
+  tmp_table3.AppendData(to_cols(&sub1_part1));
 
   Table tmp_table4(root_dir_);
   proto::Selector sel;
+  sel.mutable_sub_table_selector()->add_tag_order("s");
   sel.add_column("t");
   sel.add_column("v");
-  auto q_res = tmp_table4.Query(sel);
-  EXPECT_TRUE(q_res);
-  EXPECT_EQ(q_res->size(), 2);
-  this->CheckColumn(*q_res, "t", t_);
-  this->CheckColumn(*q_res, "v", v_);
+  sel.add_column("s");
+  sel.add_column("c");
+  check_res(tmp_table4.Query(sel), sub1_part1);
+
+  TableData sub1_part2 = {
+      .t = {4,5,6},
+      .s = {1,1,1},
+      .c = {2,2,2},
+      .v = {3,5,1},
+  };
+  tmp_table4.AppendData(to_cols(&sub1_part2));
+  check_res(tmp_table4.Query(sel), TableData{
+    .t = {1,2,3,4,5,6},
+    .s = {1,1,1,1,1,1},
+    .c = {2,2,2,2,2,2},
+    .v = {3,2,1,3,5,1},
+  });
+
+  TableData sub12_part31 = {
+      .t = {11,33,44},
+      .s = {1,2,2},
+      .c = {2,3,3},
+      .v = {44,55,66},
+  };
+
+  tmp_table4.AppendData(to_cols(&sub12_part31));
+  check_res(tmp_table4.Query(sel), TableData{
+      .t = {33,44,1,2,3,4,5,6,11},
+      .s = {2,2,1,1,1,1,1,1,1},
+      .c = {3,3,2,2,2,2,2,2,2},
+      .v = {55,66,3,2,1,3,5,1,44},
+  });
+
+  Table tmp_table5(root_dir_);
+  check_res(tmp_table5.Query(sel), TableData{
+      .t = {33,44,1,2,3,4,5,6,11},
+      .s = {2,2,1,1,1,1,1,1,1},
+      .c = {3,3,2,2,2,2,2,2,2},
+      .v = {55,66,3,2,1,3,5,1,44},
+  });
+  auto* t_sel = sel.mutable_sub_table_selector()->add_tag_selector();
+  t_sel->set_name("s");
+  t_sel->add_value("a world");
+  check_res(tmp_table5.Query(sel), TableData{
+      .t = {33,44},
+      .s = {2,2},
+      .c = {3,3},
+      .v = {55,66},
+  });
+  t_sel->add_value("giga");
+  check_res(tmp_table5.Query(sel), TableData{
+      .t = {33,44},
+      .s = {2,2},
+      .c = {3,3},
+      .v = {55,66},
+  });
+  t_sel->add_value("hello");
+  check_res(tmp_table5.Query(sel), TableData{
+      .t = {33,44,1,2,3,4,5,6,11},
+      .s = {2,2,1,1,1,1,1,1,1},
+      .c = {3,3,2,2,2,2,2,2,2},
+      .v = {55,66,3,2,1,3,5,1,44},
+  });
 }
 
 }  // namespace
