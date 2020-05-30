@@ -2,13 +2,14 @@ cmake_minimum_required(VERSION 3.8)
 project(PyDB)
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_FLAGS " -Wall -fsanitize=leak")  # -g -02 consider
+set(CMAKE_CXX_FLAGS " -Wall")  # -g -02 consider
 include(GoogleTest)
 
 
 add_subdirectory(proto)
 add_subdirectory(abseil-cpp)
 add_subdirectory(googletest)
+add_subdirectory(pybind11)
 
 
 add_library(table_lib table.cc table.h)
@@ -28,6 +29,10 @@ target_link_libraries(pydb proto ${Protobuf_LIBRARIES} spdlog::spdlog table_lib 
 
 add_executable(tst test.cc)
 target_link_libraries(tst proto ${Protobuf_LIBRARIES} table_lib gtest gmock gtest_main stdc++fs)
+
+pybind11_add_module(pywrap pywrap.cc )
+#target_compile_options(pywrap PRIVATE -Wall -O2  -fPIC)
+target_link_libraries(pywrap PRIVATE table_lib proto ${Protobuf_LIBRARIES}  )
 #
 #TARGET_LINK_LIBRARIES(pdb proto ${Protobuf_LIBRAfggfRIES})
 
