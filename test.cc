@@ -380,7 +380,7 @@ TEST_F(TableTest, TableWorkflow) {
                           {"v", FromVector(&d->v)},
                       });
   };
-  auto check_res = [this](absl::optional<RawColumns> q_res, absl::optional<TableData> d) {
+  auto check_res = [this](std::optional<RawColumns> q_res, std::optional<TableData> d) {
     if (!d) {
       EXPECT_FALSE(q_res);
       return;

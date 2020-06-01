@@ -13,6 +13,7 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/container/node_hash_map.h"
 #include "absl/strings/str_format.h"
+#include "absl/synchronization/mutex.h"
 #include "spdlog/spdlog.h"
 #include "proto/table.pb.h"
 
@@ -22,6 +23,9 @@ namespace pydb {
 //
 //};
 //
+
+class TableWrap;
+
 
 bool MaybeCreateDir(const std::string& path);
 
@@ -62,6 +66,70 @@ struct RawColumnData {
   size_t size;
 };
 
+// Do not remove check-fails from write routines, if they fail then we are in inconsistent state, so better to crash...
+template <typename T>
+void WriteProto(const std::string& path, const T& proto) noexcept {
+  std::ofstream out_file(path, std::ofstream::out | std::ofstream::binary);
+  GOOGLE_CHECK(out_file) << "Could not open path: " << path;
+  GOOGLE_CHECK(proto.SerializePartialToOstream(&out_file))
+          << "Could not write meta to: " << path;
+}
+
+template <typename T>
+bool ReadProto(const std::string& path, T* proto) {
+  std::ifstream in_meta_file(path, std::ifstream::in | std::ifstream::binary);
+  if (!in_meta_file) {
+    return false;
+  }
+  GOOGLE_CHECK(proto->ParseFromIstream(&in_meta_file))
+          << "Could not parse table meta at: " << path;
+  return true;
+}
+// In general, if .lock file exists then .back file definitely exists and is good to read.
+// If lock does not exist then the main file is good to read.
+// Read:
+// OK -> just read main
+// LOCK -> read backup
+// Write:
+// OK:
+//   1. Copy main to back
+//   2. Write lock
+//   3. Write main
+//   4. Remove lock, remove back
+// LOCK:
+//   1. Do not touch bak, it is good, just write main
+//   2. remove lock, remove back
+template <typename T>
+bool ReadProtoSafe(const std::string& path, T* proto) {
+  if (std::filesystem::exists(absl::StrCat(path, ".lock"))) {
+    spdlog::error(absl::StrCat("[Read] File %s is corrupted, reading backup.", path));
+    return ReadProto(absl::StrCat(path, ".back"), proto);
+  }
+  return ReadProto(path, proto);
+}
+
+template <typename T>
+void WriteProtoSafe(const std::string& path, const T& proto) noexcept {
+  try {
+    if (std::filesystem::exists(absl::StrCat(path, ".lock"))) {
+      spdlog::error(absl::StrCat("[Write] File %s is corrupted, recovering.", path));
+      WriteProto(path, proto);
+    } else {
+      WriteProto(absl::StrCat(path, ".back"), proto);
+      proto::Dummy dummy;
+      dummy.set_dummy("lock");
+      WriteProto(absl::StrCat(path, ".lock"), dummy);
+      WriteProto(path, proto);
+    }
+    // Both lock and back must exist at this point.
+    GOOGLE_CHECK(std::filesystem::remove(absl::StrCat(path, ".lock")));
+    GOOGLE_CHECK(std::filesystem::remove(absl::StrCat(path, ".back")));
+  } catch (...) {
+    GOOGLE_CHECK(false) << "Write routine failed. Cannot recover.";
+  }
+}
+
+
 using RawColumns = absl::flat_hash_map<std::string, RawColumnData>;
 using Span = std::pair<size_t, size_t>;
 const Span kEmptySpan = {0, 0};
@@ -82,113 +150,22 @@ class SubTable {
            const proto::SubTableId& sub_table_id)
       : table_meta_(table_meta),
         sub_table_dir_(absl::StrCat(root_table_dir, "/", sub_table_id.id())),
-        meta_path_(absl::StrCat(sub_table_dir_, "/", "META.pb")) {
+        meta_path_(absl::StrCat(sub_table_dir_, "/", "META.pb")),
+        lock_path_(absl::StrCat(sub_table_dir_, "/", "mess.lock")) {
     InitSubTable(sub_table_id);
     ExtractColumnMeta();
   };
 
-  void InitMeta(const proto::SubTableId& sub_table_id) {
-    std::ifstream in_meta_file(meta_path_, std::ifstream::in | std::ifstream::binary);
-    if (in_meta_file) {
-      GOOGLE_CHECK(meta_.ParseFromIstream(&in_meta_file))
-              << "Could not parse table meta at: " << meta_path_;
-      GOOGLE_CHECK_EQ(meta_.id().id(), sub_table_id.id()) << "Inconsistent table id. weird...";
-      return;
-    }
-    // Initialize the table - meta file does not exist yet.
-    *meta_.mutable_id() = sub_table_id;
-    WriteMeta();
-  }
-
-  void InitIndex() {
-    if (!meta_.has_index()) {
-      // Default instance.
-      index_ = {};
-      return;
-    }
-    const auto& index = meta_.index();
-    index_ = Index{
-        .last_ts = index.last_ts(),
-        .num_rows = index.num_rows(),
-    };
-    index_.value = {index.value().begin(), index.value().end()};
-    index_.pos = {index.pos().begin(), index.pos().end()};
-  }
-
-  Index GetIndex() {
+  const Index& GetIndex() const {
     return index_;
-  }
-
-  void UpdateMeta() {
-    auto* index = meta_.mutable_index();
-    index->set_num_rows(index_.num_rows);
-    index->set_last_ts(index_.last_ts);
-    *index->mutable_pos() = {index_.pos.begin(), index_.pos.end()};
-    *index->mutable_value() = {index_.value.begin(), index_.value.end()};
-    WriteMeta();
-  }
-
-  void WriteMeta() {
-    std::ofstream out_meta_file(meta_path_, std::ofstream::out | std::ofstream::binary);
-    GOOGLE_CHECK(out_meta_file) << "Could not open path: " << meta_path_;
-    GOOGLE_CHECK(meta_.SerializePartialToOstream(&out_meta_file))
-            << "Could not write to: " << meta_path_;
   }
 
   const proto::SubTableId& GetId() const {
     return meta_.id();
   }
 
-  void InitSubTable(const proto::SubTableId& sub_table_id) {
-    GOOGLE_CHECK(MaybeCreateDir(sub_table_dir_))
-            << "Failed to create sub table dir " << sub_table_dir_;
-    for (const auto&[column, column_meta] : column_meta_) {
-      if (column_meta.path.empty()) {
-        // No need to init. Column is the same for the sub table (tag column).
-        continue;
-      }
-      // Just to init the table, this will append nothing, but initialize the file if needed.
-      AppendRawColumnData(column_meta, RawColumnData{.data=nullptr, .size=0});
-    }
-    InitMeta(sub_table_id);
-    InitIndex();
-  }
-
-  std::string GetColumnPath(const std::string& name) {
-    return absl::StrCat(sub_table_dir_, "/", name, ".bin");
-  }
-  void ExtractColumnMeta() {
-    for (const auto& value_column : table_meta_.schema().value_column()) {
-      column_meta_[value_column.name()] = ColumnMeta{
-          .path=GetColumnPath(value_column.name()),
-          .type=value_column.type(),
-          .width=value_column.width(),
-      };
-    }
-
-    for (const auto& tag_column : table_meta_.schema().tag_column()) {
-      GOOGLE_CHECK(meta_.id().tag().contains(tag_column))
-              << "Tag for column not found in sub table id specification: " << tag_column << " "
-              << meta_.id().DebugString();
-      column_meta_[tag_column] = ColumnMeta{
-          .type=proto::ColumnSchema::STRING_REF,
-          .width=1,
-          .tag_str_ref = meta_.id().tag().at(tag_column),
-      };
-    }
-    column_meta_[table_meta_.schema().time_column()] = ColumnMeta{
-        .path=GetColumnPath(table_meta_.schema().time_column()),
-        .type=proto::ColumnSchema::INT64,
-        .width=1,
-    };
-
-    for (auto&[name, column_meta] : column_meta_) {
-      column_meta.type_size = GetTypeSize(column_meta.type);
-      column_meta.row_size = column_meta.type_size * column_meta.width;
-    }
-  }
-
-  absl::optional<RawColumns> Query(const proto::Selector& selector) {
+  std::optional<RawColumns> Query(const proto::Selector& selector) const {
+    absl::ReaderMutexLock lock(&mu_);
     spdlog::info("New query arrived...");
     absl::flat_hash_set<std::string> columns_to_query;
     for (const auto& column_name : selector.column()) {
@@ -222,8 +199,187 @@ class SubTable {
     return result;
   }
 
+
+
+  void AppendData(const RawColumns& column_data, bool force_recover_mess = true) {
+    absl::WriterMutexLock lock(&mu_);
+    // This condition should be checked at the Table level and not check-fail if not satisfied (but rather throw).
+    GOOGLE_CHECK_EQ(column_data.size(),
+                    column_meta_.size() - table_meta_.schema().tag_column_size())
+            << "Must specify data for all non-tag columns!";
+
+    if (force_recover_mess) {
+      WriteProto(lock_path_, proto::Dummy());
+    }
+    if (std::filesystem::exists(lock_path_)) {
+      // Bring back the consistent state. The loaded meta is consistent.
+      RecoverMess();
+    }
+
+    RawColumnData time_column = column_data.at(table_meta_.schema().time_column());
+    const size_t num_extra_rows = time_column.size / sizeof(int64_t);
+    if (num_extra_rows == 0) {
+      return;
+    }
+    auto* time = reinterpret_cast<int64_t*>(time_column.data);
+    int64_t index_density = table_meta_.index_density();
+    for (size_t i = 0; i < num_extra_rows; ++i) {
+      if (time[i] < index_.last_ts) {
+        // Restore the index.
+        InitIndex();
+        throw std::invalid_argument(absl::StrFormat(
+            "Out of range timestamp for sub table %s, latest inserted was %d, tried to insert %d",
+            meta_.id().id(),
+            index_.last_ts,
+            time[i]));
+      }
+      index_.last_ts = time[i];
+      if (index_.num_rows % index_density == 0) {
+        // Add entry to the index.
+        index_.value.push_back(index_.last_ts);
+        index_.pos.push_back(index_.num_rows);
+      }
+      index_.num_rows++;
+    }
+    WriteProto(lock_path_, proto::Dummy());
+
+    try {
+      for (const auto&[column_name, raw_column_data] : column_data) {
+        const ColumnMeta& column_meta = column_meta_.at(column_name);
+        GOOGLE_CHECK_EQ(column_meta.row_size * num_extra_rows, raw_column_data.size)
+                << "Bad data size for column: " << column_name;
+        AppendRawColumnData(column_meta, raw_column_data);
+      }
+
+    } catch (...) {
+      // Restore the index from serialized representation in meta (this will not throw). Brings back the index
+      // consistency.
+      InitIndex();
+      // Recover columns based on currently serialized meta.
+      RecoverMess();
+      // Brought back the consistent state, we can remove the mess lock.
+      GOOGLE_CHECK(std::filesystem::remove(lock_path_));
+      // Still throw to notify that append did not work out.
+      throw;
+    }
+    // This will either work or crash, if it works then data is in. Otherwise lock_path will be seen on the next write
+    // (after restart with reloaded meta) and the mess will be cleaned.
+    UpdateMeta();
+    WriteMeta();
+    GOOGLE_CHECK(std::filesystem::remove(lock_path_));
+  }
+
+ private:
+
+  void RecoverMess() {
+    size_t num_rows = index_.num_rows;
+    for (const auto& [column_name, column_meta] : column_meta_) {
+      if (column_meta.path.empty()) {
+        // Not stored.
+        continue;
+      }
+      size_t expected_size = num_rows * column_meta.row_size;
+      if (expected_size == 0 && !std::filesystem::exists(column_meta.path)) {
+        // Does not exist, satisfies the requirement.
+        continue;
+      }
+      // The size is guaranteed to be at least expected size, we will never extend (unless there is a bug ;) ).
+      // Truncate the file size to the one that is consistent with expectation, this will remove bad, partially
+      // added data.
+      std::filesystem::resize_file(column_meta.path, expected_size);
+    }
+  }
+
+  void InitMeta(const proto::SubTableId& sub_table_id) {
+    std::ifstream in_meta_file(meta_path_, std::ifstream::in | std::ifstream::binary);
+    if (ReadProtoSafe(meta_path_, &meta_)) {
+      GOOGLE_CHECK_EQ(meta_.id().id(), sub_table_id.id()) << "Inconsistent table id. weird...";
+      return;
+    }
+    // Initialize the table - meta file does not exist yet.
+    *meta_.mutable_id() = sub_table_id;
+    WriteMeta();
+  }
+
+  void InitIndex() noexcept {
+    if (!meta_.has_index()) {
+      // Default instance.
+      index_ = {};
+      return;
+    }
+    const auto& index = meta_.index();
+    index_ = Index{
+        .last_ts = index.last_ts(),
+        .num_rows = index.num_rows(),
+    };
+    index_.value = {index.value().begin(), index.value().end()};
+    index_.pos = {index.pos().begin(), index.pos().end()};
+  }
+
+   void UpdateMeta() noexcept {
+    auto* index = meta_.mutable_index();
+    index->set_num_rows(index_.num_rows);
+    index->set_last_ts(index_.last_ts);
+    *index->mutable_pos() = {index_.pos.begin(), index_.pos.end()};
+    *index->mutable_value() = {index_.value.begin(), index_.value.end()};
+  }
+
+  void WriteMeta() {
+    WriteProtoSafe(meta_path_, meta_);
+  }
+
+  void InitSubTable(const proto::SubTableId& sub_table_id) {
+    GOOGLE_CHECK(MaybeCreateDir(sub_table_dir_))
+            << "Failed to create sub table dir " << sub_table_dir_;
+    for (const auto&[column, column_meta] : column_meta_) {
+      if (column_meta.path.empty()) {
+        // No need to init. Column is the same for the sub table (tag column).
+        continue;
+      }
+      // Just to init the table, this will append nothing, but initialize the file if needed.
+      AppendRawColumnData(column_meta, RawColumnData{.data=nullptr, .size=0});
+    }
+    InitMeta(sub_table_id);
+    InitIndex();
+  }
+
+  std::string GetColumnPath(const std::string& name) {
+    return absl::StrCat(sub_table_dir_, "/", name, ".bin");
+  }
+
+  void ExtractColumnMeta() {
+    for (const auto& value_column : table_meta_.schema().value_column()) {
+      column_meta_[value_column.name()] = ColumnMeta{
+          .path=GetColumnPath(value_column.name()),
+          .type=value_column.type(),
+          .width=value_column.width(),
+      };
+    }
+
+    for (const auto& tag_column : table_meta_.schema().tag_column()) {
+      GOOGLE_CHECK(meta_.id().tag().contains(tag_column))
+              << "Tag for column not found in sub table id specification: " << tag_column << " "
+              << meta_.id().DebugString();
+      column_meta_[tag_column] = ColumnMeta{
+          .type=proto::ColumnSchema::STRING_REF,
+          .width=1,
+          .tag_str_ref = meta_.id().tag().at(tag_column),
+      };
+    }
+    column_meta_[table_meta_.schema().time_column()] = ColumnMeta{
+        .path=GetColumnPath(table_meta_.schema().time_column()),
+        .type=proto::ColumnSchema::INT64,
+        .width=1,
+    };
+
+    for (auto&[name, column_meta] : column_meta_) {
+      column_meta.type_size = GetTypeSize(column_meta.type);
+      column_meta.row_size = column_meta.type_size * column_meta.width;
+    }
+  }
+
   std::pair<Span, RawColumnData> QueryTimeSpan(const proto::TimeSelector& time_selector,
-                                               bool return_time_column) {
+                                               bool return_time_column) const {
     Span coarse_span = QueryCoarseTimeSpanFromIndex(time_selector);
     spdlog::info("coarse query_span is {}->{}", coarse_span.first, coarse_span.second);
 
@@ -292,7 +448,7 @@ class SubTable {
 
   // Returns a coarse span where the data is guaranteed to be contained. The more precise the better as it avoids
   // reading actual time data from memory.
-  Span QueryCoarseTimeSpanFromIndex(const proto::TimeSelector& time_selector) {
+  Span QueryCoarseTimeSpanFromIndex(const proto::TimeSelector& time_selector) const {
     if (index_.num_rows == 0) {
       spdlog::info("No rows in table, query result will be empty.");
       return kEmptySpan;
@@ -328,11 +484,11 @@ class SubTable {
     return result;
   }
 
-  RawColumnData ReadRawColumnSingle(const ColumnMeta& column_meta, const Span& span) {
+  RawColumnData ReadRawColumnSingle(const ColumnMeta& column_meta, const Span& span) const {
     return ReadRawColumn(column_meta, {span});
   }
 
-  RawColumnData ReadRawColumn(const ColumnMeta& column_meta, const std::vector<Span>& spans) {
+  RawColumnData ReadRawColumn(const ColumnMeta& column_meta, const std::vector<Span>& spans) const {
     size_t num_rows = 0;
     for (const auto& span : spans) {
       num_rows += span.second - span.first;
@@ -369,44 +525,6 @@ class SubTable {
     };
   }
 
-  void AppendData(const RawColumns& column_data) {
-    // This condition should be checked at the Table level and not check-fail if not satisfied (but rather throw).
-    GOOGLE_CHECK_EQ(column_data.size(),
-                    column_meta_.size() - table_meta_.schema().tag_column_size())
-            << "Must specify data for all non-tag coulumns!";
-    RawColumnData time_column = column_data.at(table_meta_.schema().time_column());
-    const size_t num_extra_rows = time_column.size / sizeof(int64_t);
-    if (num_extra_rows == 0) {
-      return;
-    }
-    auto* time = reinterpret_cast<int64_t*>(time_column.data);
-    int64_t index_density = table_meta_.index_density();
-    for (size_t i = 0; i < num_extra_rows; ++i) {
-      if (time[i] < index_.last_ts) {
-        throw std::invalid_argument(absl::StrFormat(
-            "Out of range timestamp for sub table %s, latest inserted was %d, tried to insert %d",
-            meta_.id().id(),
-            index_.last_ts,
-            time[i]));
-      }
-      index_.last_ts = time[i];
-      if (index_.num_rows % index_density == 0) {
-        // Add entry to the index.
-        index_.value.push_back(index_.last_ts);
-        index_.pos.push_back(index_.num_rows);
-      }
-      index_.num_rows++;
-    }
-
-    for (const auto&[column_name, raw_column_data] : column_data) {
-      const ColumnMeta& column_meta = column_meta_.at(column_name);
-      GOOGLE_CHECK_EQ(column_meta.row_size * num_extra_rows, raw_column_data.size)
-              << "Bad data size for column: " << column_name;
-      AppendRawColumnData(column_meta, raw_column_data);
-    }
-    UpdateMeta();
-  }
-
   void AppendRawColumnData(const ColumnMeta& column_meta, const RawColumnData& raw_column_data) {
     std::ofstream
         f(column_meta.path, std::ofstream::out | std::ofstream::binary | std::ofstream::app);
@@ -417,12 +535,14 @@ class SubTable {
     GOOGLE_CHECK(f.good()) << "Something went wrong when writing: " << column_meta.path;
   }
 
- private:
+  mutable absl::Mutex mu_;
+
   proto::SubTable meta_;
   const proto::Table& table_meta_;
 
   const std::string sub_table_dir_;
   const std::string meta_path_;
+  const std::string lock_path_;
 
   absl::flat_hash_map<std::string, ColumnMeta> column_meta_;
 
@@ -434,21 +554,24 @@ class Table {
  public:
   explicit Table(std::string table_root_dir) : Table(table_root_dir, {}) {};
 
-  Table(std::string table_root_dir, const absl::optional<proto::Table>& table_meta)
+  Table(std::string table_root_dir, const std::optional<proto::Table>& table_meta)
       : table_root_dir_(std::move(table_root_dir)),
-        meta_path_(absl::StrCat(table_root_dir_, "/", "META.pb")) {
+        meta_path_(absl::StrCat(table_root_dir_, "/", "META.pb")),
+        str_ref_path_(absl::StrCat(table_root_dir_, "/", "STR_REF.pb")) {
     MaybeCreateDir(table_root_dir_);
     sub_tables_.reserve(meta_.sub_table_id_size());
     if (table_meta) {
       meta_ = *table_meta;
-      if (ReadMeta()) {
-        throw std::invalid_argument(absl::StrFormat(
-            "Table at %s already exists, metadata must not be provided.",
-            meta_path_));
+      if (ReadProtoSafe(meta_path_, &meta_)) {
+        if (table_meta->schema().SerializeAsString() != GetMeta().schema().SerializeAsString()) {
+          throw std::invalid_argument(absl::StrFormat(
+              "Table at %s already exists, but the provided table schema is not consistent.", table_root_dir_));
+        }
+
       }
-      WriteMeta();
+      WriteProtoSafe(meta_path_, meta_);
     } else {
-      if (!ReadMeta()) {
+      if (!ReadProtoSafe(meta_path_, &meta_)) {
         throw std::invalid_argument(absl::StrFormat(
             "Table at %s does not exist yet, you need to provide the metadata.",
             meta_path_));
@@ -472,24 +595,9 @@ class Table {
   const proto::Table& GetMeta() {
     return meta_;
   }
-  void WriteMeta() {
-    std::ofstream out_meta_file(meta_path_, std::ofstream::out | std::ofstream::binary);
-    GOOGLE_CHECK(out_meta_file) << "Could not open path: " << meta_path_;
-    GOOGLE_CHECK(meta_.SerializePartialToOstream(&out_meta_file))
-            << "Could not write meta to: " << meta_path_;
-  }
 
-  bool ReadMeta() {
-    std::ifstream in_meta_file(meta_path_, std::ifstream::in | std::ifstream::binary);
-    if (!in_meta_file) {
-      return false;
-    }
-    GOOGLE_CHECK(meta_.ParseFromIstream(&in_meta_file))
-            << "Could not parse table meta at: " << meta_path_;
-    return true;
-  }
 
-  absl::optional<RawColumns> Query(const proto::Selector& selector) {
+  std::optional<RawColumns> Query(const proto::Selector& selector) {
     std::vector<SubTable*> sub_tables = GetSelectedSubTables(selector.sub_table_selector());
     if (sub_tables.empty()) {
       return {};
@@ -499,6 +607,7 @@ class Table {
     for (SubTable* sub_table : sub_tables) {
       if (result_size > (1UL << 30UL)) {
         // Bail out if the result is over 1GB, bad query? TODO: Improve error handling in general.
+        spdlog::error("Query result too large, returning first 1GB...");
         break;
       }
       auto sub_query_result = sub_table->Query(selector);
@@ -521,6 +630,7 @@ class Table {
   }
 
   SubTable* GetOrCreateSubTable(std::vector<StrRef> sub_table_selector) {
+    absl::WriterMutexLock lock(&mu_subtable_);
     GOOGLE_CHECK_EQ(sub_table_selector.size(), meta_.schema().tag_column_size())
             << "Bad selector, must be equal to number of tag columns in the same order." << sub_table_selector.size();
     const std::vector<const std::string*> resolved_selector = ResolveStringRefs(sub_table_selector);
@@ -535,15 +645,17 @@ class Table {
     const proto::SubTableId id = MakeSubTableId(str_tags);
     const auto index_entry = GetUniqueIndexEntry(id);
     if (!sub_table_unique_index_.contains(index_entry)) {
+      // Lock is held so this is safe.
       *meta_.add_sub_table_id() = id;
       MountSubTable(id);
       GOOGLE_CHECK(sub_table_unique_index_.contains(index_entry));
-      WriteMeta();
+      WriteProtoSafe(meta_path_, meta_);
     }
     return sub_table_unique_index_[index_entry];
   }
 
   void AppendData(const RawColumns& column_data) {
+    // Thread safe, sub tables handle the thread safety independently.
     const size_t total_rows = column_data.at(meta_.schema().time_column()).size / sizeof(int64_t);
     if (!total_rows) {
       return;
@@ -620,19 +732,23 @@ class Table {
   }
 
   void LoadStringRefs() {
+    proto::StringRefMap str_refs;
+    if (!ReadProtoSafe(str_ref_path_, &str_refs)) {
+      return;
+    }
     GOOGLE_CHECK(string_ref_map_.empty()) << "Load string refs once at the init.";
-    for (const auto& pair : meta_.string_ref_map().mapping()) {
+    for (const auto& pair : str_refs.mapping()) {
       string_ref_map_[pair.first] = pair.second;
       inv_string_ref_map_[pair.second] = pair.first;
     }
   }
 
   void DumpStringRefs() {
-    meta_.mutable_string_ref_map()->clear_mapping();
+    proto::StringRefMap str_refs;
     for (const auto& pair: string_ref_map_) {
-      (*meta_.mutable_string_ref_map()->mutable_mapping())[pair.first] = pair.second;
+      (*str_refs.mutable_mapping())[pair.first] = pair.second;
     }
-    WriteMeta();
+    WriteProtoSafe(str_ref_path_, str_refs);
   }
 
   std::vector<StrRef> MintStringRefs(const std::vector<std::string>& strings) {
@@ -642,21 +758,29 @@ class Table {
       if (inv_string_ref_map_.contains(str)) {
         result.push_back(inv_string_ref_map_[str]);
       } else {
+        if (!did_mint) {
+          mu_mint_.WriterLock();
+        }
+        did_mint = true;
+        if (inv_string_ref_map_.contains(str)) {
+          continue;
+        }
         StrRef mint = string_ref_map_.size() + 1;
         result.push_back(mint);
         inv_string_ref_map_[str] = mint;
         string_ref_map_[mint] = str;
-        did_mint = true;
       }
     }
     if (did_mint) {
       // VERY INEFFICIENT! Todo: append new references instead
       DumpStringRefs();
+      mu_mint_.WriterUnlock();
     }
     return result;
   }
 
-  std::vector<const std::string*> ResolveStringRefs(const std::vector<StrRef>& refs) {
+  std::vector<const std::string*> ResolveStringRefs(const std::vector<StrRef>& refs) const {
+    absl::ReaderMutexLock lock(&mu_mint_);
     std::vector<const std::string*> result;
     for (const StrRef ref : refs) {
       if (string_ref_map_.contains(ref)) {
@@ -681,6 +805,7 @@ class Table {
   }
 
  private:
+  friend class TableWrap;
 
   void MountSubTable(const proto::SubTableId& id) {
     sub_tables_.push_back(absl::make_unique<SubTable>(table_root_dir_, meta_, id));
@@ -715,6 +840,8 @@ class Table {
   }
 
   std::vector<SubTable*> GetSelectedSubTables(const proto::SubTableSelector& selector) {
+    // We cant not be selecting while subtables are being written.
+    absl::ReaderMutexLock lock(&mu_subtable_);
     // This can be improved by taking the first tag selection as the initial selection.
     absl::flat_hash_set<SubTable*> selection;
     for (auto& sub_table : sub_tables_) {
@@ -772,8 +899,12 @@ class Table {
     }
   }
 
+  mutable absl::Mutex mu_subtable_;
+  mutable absl::Mutex mu_mint_;
+
   const std::string table_root_dir_;
   const std::string meta_path_;
+  const std::string str_ref_path_;
   proto::Table meta_;
 
   std::vector<std::unique_ptr<SubTable>> sub_tables_;

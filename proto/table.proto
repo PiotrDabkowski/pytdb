@@ -2,12 +2,13 @@ syntax = "proto2";
 
 package pydb.proto;
 
+message Dummy {
+    optional string dummy = 1;
+}
 
 message Table {
     optional string name = 1;
     optional Schema schema = 2;
-
-    optional StringRefMap string_ref_map = 3;
 
     repeated SubTableId sub_table_id = 4;
 

@@ -27,7 +27,7 @@ size_t GetTypeSize(proto::ColumnSchema::Type type) {
     case proto::ColumnSchema::STRING_REF:
       return sizeof(uint32_t);
     default:
-      GOOGLE_LOG(FATAL) << "Unknown type";
+      throw std::logic_error("unknown column type");
   }
 }
 
