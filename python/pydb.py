@@ -3,8 +3,6 @@ import os
 import numpy as np
 import time
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "cmake-build-release"))
-
 import pywrap
 import table_pb2
 a = table_pb2.Table()

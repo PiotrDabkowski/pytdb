@@ -28,6 +28,7 @@ add_subdirectory(googletest)
 add_subdirectory(pybind11)
 
 
+
 add_library(table_lib table.cc table.h)
 target_link_libraries(table_lib proto ${Protobuf_LIBRARIES} absl::strings absl::str_format absl::flat_hash_map spdlog::spdlog ${LINUX_EXTRA_LIBS})
 
@@ -43,7 +44,7 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 add_executable(tst test.cc)
 target_link_libraries(tst proto ${Protobuf_LIBRARIES} table_lib gtest gmock gtest_main ${LINUX_EXTRA_LIBS})
 
-pybind11_add_module(pywrap pywrap.cc )
+pybind11_add_module(pywrap python/pywrap.cc)
 #target_compile_options(pywrap PUBLIC -Wno-register)
 target_link_libraries(pywrap PRIVATE  table_lib proto ${Protobuf_LIBRARIES})
 

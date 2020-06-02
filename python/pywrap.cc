@@ -5,7 +5,7 @@
 #include <string>
 
 #include "proto/table.pb.h"
-#include "table.h"
+#include "../table.h"
 
 namespace pydb {
 namespace {
