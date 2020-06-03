@@ -26,7 +26,6 @@ namespace pydb {
 
 class TableWrap;
 
-
 bool MaybeCreateDir(const std::string& path);
 
 struct Index {
@@ -67,7 +66,7 @@ struct RawColumnData {
 };
 
 // Do not remove check-fails from write routines, if they fail then we are in inconsistent state, so better to crash...
-template <typename T>
+template<typename T>
 void WriteProto(const std::string& path, const T& proto) noexcept {
   std::ofstream out_file(path, std::ofstream::out | std::ofstream::binary);
   GOOGLE_CHECK(out_file) << "Could not open path: " << path;
@@ -75,7 +74,7 @@ void WriteProto(const std::string& path, const T& proto) noexcept {
           << "Could not write meta to: " << path;
 }
 
-template <typename T>
+template<typename T>
 bool ReadProto(const std::string& path, T* proto) {
   std::ifstream in_meta_file(path, std::ifstream::in | std::ifstream::binary);
   if (!in_meta_file) {
@@ -99,7 +98,7 @@ bool ReadProto(const std::string& path, T* proto) {
 // LOCK:
 //   1. Do not touch bak, it is good, just write main
 //   2. remove lock, remove back
-template <typename T>
+template<typename T>
 bool ReadProtoSafe(const std::string& path, T* proto) {
   if (std::filesystem::exists(absl::StrCat(path, ".lock"))) {
     spdlog::error(absl::StrCat("[Read] File %s is corrupted, reading backup.", path));
@@ -108,7 +107,7 @@ bool ReadProtoSafe(const std::string& path, T* proto) {
   return ReadProto(path, proto);
 }
 
-template <typename T>
+template<typename T>
 void WriteProtoSafe(const std::string& path, const T& proto) noexcept {
   try {
     if (std::filesystem::exists(absl::StrCat(path, ".lock"))) {
@@ -128,7 +127,6 @@ void WriteProtoSafe(const std::string& path, const T& proto) noexcept {
     GOOGLE_CHECK(false) << "Write routine failed. Cannot recover.";
   }
 }
-
 
 using RawColumns = absl::flat_hash_map<std::string, RawColumnData>;
 using Span = std::pair<size_t, size_t>;
@@ -166,7 +164,7 @@ class SubTable {
 
   std::optional<RawColumns> Query(const proto::Selector& selector) const {
     absl::ReaderMutexLock lock(&mu_);
-    spdlog::info("New query arrived...");
+    spdlog::debug("New query arrived...");
     absl::flat_hash_set<std::string> columns_to_query;
     for (const auto& column_name : selector.column()) {
       columns_to_query.insert(column_name);
@@ -182,7 +180,7 @@ class SubTable {
 
     std::tie(query_span, time_column_data) =
         QueryTimeSpan(selector.time_selector(), return_time_column);
-    spdlog::info("query_span is {}->{}", query_span.first, query_span.second);
+    spdlog::debug("query_span is {}->{}", query_span.first, query_span.second);
 
     if (query_span == kEmptySpan) {
       // No results for this query.
@@ -195,11 +193,9 @@ class SubTable {
     if (return_time_column) {
       result[time_column_name] = time_column_data;
     }
-    spdlog::info("Done, query had results.");
+    spdlog::debug("Done, query had results.");
     return result;
   }
-
-
 
   void AppendData(const RawColumns& column_data, bool force_recover_mess = true) {
     absl::WriterMutexLock lock(&mu_);
@@ -273,7 +269,7 @@ class SubTable {
 
   void RecoverMess() {
     size_t num_rows = index_.num_rows;
-    for (const auto& [column_name, column_meta] : column_meta_) {
+    for (const auto&[column_name, column_meta] : column_meta_) {
       if (column_meta.path.empty()) {
         // Not stored.
         continue;
@@ -316,7 +312,7 @@ class SubTable {
     index_.pos = {index.pos().begin(), index.pos().end()};
   }
 
-   void UpdateMeta() noexcept {
+  void UpdateMeta() noexcept {
     auto* index = meta_.mutable_index();
     index->set_num_rows(index_.num_rows);
     index->set_last_ts(index_.last_ts);
@@ -381,7 +377,7 @@ class SubTable {
   std::pair<Span, RawColumnData> QueryTimeSpan(const proto::TimeSelector& time_selector,
                                                bool return_time_column) const {
     Span coarse_span = QueryCoarseTimeSpanFromIndex(time_selector);
-    spdlog::info("coarse query_span is {}->{}", coarse_span.first, coarse_span.second);
+    spdlog::debug("coarse query_span is {}->{}", coarse_span.first, coarse_span.second);
 
     if (coarse_span.first >= coarse_span.second) {
       return {kEmptySpan, {}};
@@ -406,7 +402,7 @@ class SubTable {
       }
       start += coarse_span.first;
     } else {
-      spdlog::error("No query start!");
+      spdlog::debug("No query start!");
       start = 0;
     }
 
@@ -450,7 +446,7 @@ class SubTable {
   // reading actual time data from memory.
   Span QueryCoarseTimeSpanFromIndex(const proto::TimeSelector& time_selector) const {
     if (index_.num_rows == 0) {
-      spdlog::info("No rows in table, query result will be empty.");
+      spdlog::debug("No rows in table, query result will be empty.");
       return kEmptySpan;
     }
     if (time_selector.has_end() && index_.value.at(0) > time_selector.end()) {
@@ -565,7 +561,10 @@ class Table {
       if (ReadProtoSafe(meta_path_, &meta_)) {
         if (table_meta->schema().SerializeAsString() != GetMeta().schema().SerializeAsString()) {
           throw std::invalid_argument(absl::StrFormat(
-              "Table at %s already exists, but the provided table schema is not consistent.", table_root_dir_));
+              "Table at %s already exists, but the provided table schema is not consistent: \nexisting: '%s'\nprovided: '%s'",
+              table_root_dir_,
+              GetMeta().schema().DebugString(),
+              table_meta->schema().DebugString()));
         }
 
       }
@@ -577,7 +576,7 @@ class Table {
             meta_path_));
       }
     }
-    spdlog::info(meta_.DebugString());
+    spdlog::debug(meta_.DebugString());
 
     LoadStringRefs();
     for (const auto& sub_table_id : meta_.sub_table_id()) {
@@ -595,7 +594,6 @@ class Table {
   const proto::Table& GetMeta() {
     return meta_;
   }
-
 
   std::optional<RawColumns> Query(const proto::Selector& selector) {
     std::vector<SubTable*> sub_tables = GetSelectedSubTables(selector.sub_table_selector());
@@ -632,7 +630,8 @@ class Table {
   SubTable* GetOrCreateSubTable(std::vector<StrRef> sub_table_selector) {
     absl::WriterMutexLock lock(&mu_subtable_);
     GOOGLE_CHECK_EQ(sub_table_selector.size(), meta_.schema().tag_column_size())
-            << "Bad selector, must be equal to number of tag columns in the same order." << sub_table_selector.size();
+            << "Bad selector, must be equal to number of tag columns in the same order."
+            << sub_table_selector.size();
     const std::vector<const std::string*> resolved_selector = ResolveStringRefs(sub_table_selector);
     GOOGLE_CHECK_EQ(resolved_selector.size(), sub_table_selector.size());
     absl::flat_hash_map<std::string, std::string> str_tags;
@@ -703,7 +702,12 @@ class Table {
       const RawColumnData& full_column = column_data.at(column_name);
       GOOGLE_CHECK_EQ(full_column.size % total_rows, 0);
       size_t item_size = full_column.size / total_rows;
-      GOOGLE_CHECK_EQ(item_size % 4, 0) << absl::StrFormat("Bad element size (%d) column %s, columns size %d, total_rows %d", item_size, column_name, full_column.size, total_rows);
+      GOOGLE_CHECK_EQ(item_size % 4, 0) << absl::StrFormat(
+          "Bad element size (%d) column %s, columns size %d, total_rows %d",
+          item_size,
+          column_name,
+          full_column.size,
+          total_rows);
       sub_column_data[column_name] = {
           .data = full_column.data + row_span.first * item_size,
           .size = (row_span.second - row_span.first) * item_size,
@@ -869,7 +873,7 @@ class Table {
       for (const auto& order_tag : selector.tag_order()) {
         order.push_back(tag_column_to_order_.at(order_tag));
       }
-      auto cmp = [ &order] (const SubTable* a, const SubTable* b) {
+      auto cmp = [&order](const SubTable* a, const SubTable* b) {
         for (size_t tag_col : order) {
           const std::string a_s = a->GetId().str_tag(tag_col);
           const std::string b_s = b->GetId().str_tag(tag_col);
@@ -887,7 +891,7 @@ class Table {
   }
 
   void IndexSubTable(SubTable* sub_table) {
-    spdlog::info("Indexing table {}", sub_table->GetId().id());
+    spdlog::debug("Indexing table {}", sub_table->GetId().id());
     const std::string entry = GetUniqueIndexEntry(sub_table->GetId());
     GOOGLE_CHECK(!sub_table_unique_index_.contains(entry))
             << "Indexed table already exists: " << sub_table->GetId().id();

@@ -99,6 +99,7 @@ class TableWrap {
   // Shares the underlying data buffers, zero copy between cpp and py.
   using PyColumns = std::unordered_map<std::string, py::array>;
   struct ColumnMeta {
+    std::string name;
     proto::ColumnSchema::Type type;
     size_t width;
     size_t type_size;
@@ -138,6 +139,7 @@ class TableWrap {
     };
 
     for (auto&[name, column_meta] : column_meta_) {
+      column_meta.name = name;
       column_meta.type_size = GetTypeSize(column_meta.type);
       column_meta.row_size = column_meta.type_size * column_meta.width;
       column_meta.dtype = GetDtype(column_meta);
@@ -169,7 +171,7 @@ class TableWrap {
 
   void AppendData(const PyColumns& columns) {
     if (columns.size() != column_meta_.size()) {
-      throw py::value_error(absl::StrCat("All columns must be provided when appending data, expected %d columns, got %d",
+      throw py::value_error(absl::StrFormat("All columns must be provided when appending data, expected %d columns, got %d",
                                          column_meta_.size(),
                                          columns.size()));
     }
@@ -222,7 +224,7 @@ class TableWrap {
       if (!num_rows) {
         num_rows = column.shape(0);
       } else if (*num_rows != column.shape(0)) {
-        throw py::value_error(absl::StrCat("Inconsistent number of rows between columns, seen both %d and %d",
+        throw py::value_error(absl::StrFormat("Inconsistent number of rows between columns, seen both %d and %d",
                                            *num_rows,
                                            column.shape(0)));
       }
@@ -274,8 +276,9 @@ class TableWrap {
 
     std::vector<ssize_t> strides = {column_meta.dtype.itemsize()};
     std::vector<ssize_t> shape = {num_rows};
-
+    spdlog::info("Constructing column");
     py::capsule free_when_done(raw_column_data->data, [](void* f) {
+      spdlog::info("Freeing column");
       char* foo = reinterpret_cast<char*>(f);
       delete[] foo;
     });
