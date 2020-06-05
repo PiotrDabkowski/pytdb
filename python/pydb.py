@@ -7,12 +7,12 @@ import pandas as pd
 import numpy as np
 sys.path.insert(0,
                 os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cmake-build-release"))
-print(sys.path[0])
 
 import pywrap
 from . import table_pb2
 import time
 
+DT_STR_REF = np.dtype("uint32")
 
 class Table:
     def __init__(self, db_root_dir, table_name: str, time_column: str = None,
@@ -30,19 +30,21 @@ class Table:
                         float_value_column in float_value_columns
                     ],
                 ))
-            self.columns = self.get_columns_from_schema(self.config.schema)
+            self.columns = self._get_columns_from_schema(self.config.schema)
         else:
             self.config = None
 
         self.table = pywrap.Table(self.table_path,
                                   self.config.SerializeToString() if self.config is not None else None)
         self._update_config()
-        self.columns = self.get_columns_from_schema(self.config.schema)
+        self.columns = self._get_columns_from_schema(self.config.schema)
+        self.columns_set = set(self._get_columns_from_schema(self.config.schema))
         self.tag_columns = set(self.config.schema.tag_column)
+        self.time_column = self.config.schema.time_column
         self.datetime_dtype = pd.to_datetime("2011-11-11").to_datetime64().dtype # datetime64[ns] aka M8[ns]
 
     @staticmethod
-    def get_columns_from_schema(schema: table_pb2.Schema):
+    def _get_columns_from_schema(schema: table_pb2.Schema):
         columns = [schema.time_column] + list(schema.tag_column) + list(
             value_column.name for value_column in schema.value_column)
         expected_count = 1 + len(schema.tag_column) + len(schema.value_column)
@@ -63,13 +65,11 @@ class Table:
             self.config = table_pb2.Table()
         self.config.ParseFromString(self.table.get_meta_wire())
 
-    def query_df(self, time_start=None, time_end=None, include_start=True, include_end=False,
-                 columns: Optional[List[str]] = None, resolve_strings=True,
-                 tag_column_order: Optional[List[str]] = None,
-                 **tag_selectors) -> pd.DataFrame:
+    def _make_query_selector(self, time_start, time_end, include_start, include_end,
+                             columns, tag_column_order, **tag_selectors):
         selector = table_pb2.Selector(column=columns if columns is not None else self.columns,
-                                      time_selector=table_pb2.TimeSelector(start=time_start,
-                                                                           end=time_end,
+                                      time_selector=table_pb2.TimeSelector(start=self._to_ns64(time_start) if time_start else None,
+                                                                           end=self._to_ns64(time_end) if time_end else None,
                                                                            include_start=include_start,
                                                                            include_end=include_end),
                                       )
@@ -88,18 +88,86 @@ class Table:
                 raise ValueError("Column %s provided in tag_selectors is not a tag column.")
             sub_selector.tag_selector.append(table_pb2.TagSelector(name=tag, value=[
                 value] if isinstance(value, str) else value))
+        return selector
+
+    def query(self, time_start=None, time_end=None, include_start=True, include_end=False,
+                 columns: Optional[List[str]] = None, resolve_strings=True,
+                 tag_column_order: Optional[List[str]] = None,
+                 **tag_selectors) -> Dict[str, np.ndarray]:
+        selector = self._make_query_selector(time_start, time_end, include_start, include_end,
+                             columns, tag_column_order, **tag_selectors)
+        return self._query(selector, resolve_strings)
+
+    def _query(self, selector: table_pb2.Selector, resolve_strings: bool):
         query_start = time.perf_counter()
         response = self.table.query(selector.SerializeToString())
         query_time = time.perf_counter() - query_start
-        calc_time = time.perf_counter() - query_start - query_time
-        print("Query time:", query_time)
+        # print("Query time:", query_time)
+        if resolve_strings:
+            for tag_column in self.tag_columns:
+                if tag_column not in response:
+                    continue
+                response[tag_column] = self._resolve_str_ref_column(response[tag_column])
+
+        return response
+
+    def _resolve_str_ref_column(self, arr: np.ndarray) -> np.ndarray:
+        """Converts input array of str_ref dt(uint32) to array of resolved strings dt(object)."""
+        if arr.dtype != DT_STR_REF:
+            raise ValueError("Returned tag column does not have a str_ref type!")
+        # Just like np.unique but 10x faster for a large number of dups, and comparable otherwise.
+        unique_refs, inverse = pywrap.fast_unique(arr)
+        return np.array(self.table.resolve_str_refs(unique_refs, throw_if_not_found=True), dtype=np.dtype("object"))[inverse]
+
+    def _encode_str_ref_column(self, arr: np.ndarray) -> np.ndarray:
+        """Converts input array of str_ref dt(uint32) to array of resolved strings dt(object)."""
+        if arr.dtype != np.dtype("object"):
+            raise ValueError("Input string reference column must have object dtype!")
+        unique_strs, inverse = np.unique(arr, return_inverse=True)
+        return np.array(self.table.mint_str_refs([str(e) for e in unique_strs]), dtype=DT_STR_REF)[inverse]
+
+    def query_df(self, time_start=None, time_end=None, include_start=True, include_end=False,
+                 columns: Optional[List[str]] = None, resolve_strings=True,
+                 tag_column_order: Optional[List[str]] = None,
+                 **tag_selectors) -> pd.DataFrame:
+        selector = self._make_query_selector(time_start, time_end, include_start, include_end,
+                                             columns, tag_column_order, **tag_selectors)
+        response = self._query(selector, resolve_strings)
         if not response:
             # Empty.
             return pd.DataFrame({}, columns=selector.column)
+        if self.time_column in response:
+            response[self.time_column] = self._ns64_to_time(response[self.time_column])
         return pd.DataFrame(response, columns=selector.column)
 
-    def append_data_df(self, df: pd.DataFrame, copy_and_sort=False):
-        pass
+    def append_data_df(self, df: pd.DataFrame, sort=False):
+        if set(df.columns) != self.columns_set:
+            raise ValueError("Data frame to append needs to contain all the columns in the table and nothing else, expected %s, got %s" % (self.columns_set, set(df.columns)))
+        if sort:
+            df = df.sort_values(by=list(self.tag_columns) + [self.time_column])
+        columns = {name: df[name].to_numpy() for name in self.columns}
+
+        def maybe_convert_column(col, dtype):
+            if col.dtype == dtype:
+                return col
+            return col.astype(dtype)
+        converted_columns = {}
+        for column_name, value in columns.items():
+            if column_name in self.tag_columns:
+                if value.dtype == np.dtype("object"):
+                    converted_columns[column_name] = self._encode_str_ref_column(value)
+                elif value.dtype == DT_STR_REF:
+                    converted_columns[column_name] = value
+                else:
+                    raise ValueError("Invalid dtype of tag column %s, expected either object or %s" % (column_name, DT_STR_REF))
+            elif column_name == self.time_column:
+                converted_columns[column_name] = maybe_convert_column(value, np.dtype("int64"))
+            else:
+                # Value column.
+                converted_columns[column_name] = maybe_convert_column(value, np.dtype("float32"))
+        self.table.append_data(converted_columns)
+
+
 
 
 
@@ -109,17 +177,17 @@ class Table:
 # print(r.dtype)
 # print(time.perf_counter() - s)
 # # table.mint_str_refs(list(map(str, range(1000))))
-# # for e in range(1, 100):
-# #     try:
-# #         table.append_data({
-# #             "t": np.arange(100000, 1000000).astype(np.int64),
-# #             "s": np.ones(900000).astype(np.uint32) * e,
-# #             "c": np.arange(100000, 1000000).astype(np.float32) / 10,
-# #         })
-# #         print(e)
-# #     except:
-# #         print("Data already in.")
-# #         break
+# for e in range(1, 100):
+#     try:
+#         table.append_data({
+#             "t": np.arange(100000, 1000000).astype(np.int64),
+#             "s": np.ones(900000).astype(np.uint32) * e,
+#             "c": np.arange(100000, 1000000).astype(np.float32) / 10,
+#         })
+#         print(e)
+#     except:
+#         print("Data already in.")
+#         break
 # #
 # # while 1:
 # #     sel = table_pb2.Selector(column=["t", "s", "c"])

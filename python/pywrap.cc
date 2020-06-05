@@ -179,19 +179,25 @@ class TableWrap {
     table_->AppendData(raw_columns);
   }
 
-  std::vector<std::optional<std::string>> ResolveStrRefs(const std::vector<StrRef>& str_refs) const {
+  std::vector<std::optional<std::string>> ResolveStrRefs(const std::vector<StrRef>& str_refs, bool throw_if_not_found) const {
     auto resolved = table_->ResolveStringRefs(str_refs);
     std::vector<std::optional<std::string>> result;
     result.reserve(resolved.size());
+    size_t i = 0;
     for (const auto* res : resolved) {
       if (res) {
         result.push_back(*res);
       } else {
+        if (throw_if_not_found) {
+          throw py::value_error(absl::StrFormat("Could not resolve str ref: %d (did you remember to mint it?)", str_refs.at(i)));
+        }
         result.push_back({});
       }
+      ++i;
     }
     return result;
   }
+
 
   std::vector<StrRef> MintStrRefs(const std::vector<std::string>& strings) {
     return table_->MintStringRefs(strings);
@@ -304,13 +310,14 @@ PYBIND11_MODULE(pywrap, m) {
   m.def("show", &show);
   m.def("check", &check);
   m.def("fast_unique", &FastUnique<uint32_t, uint32_t>);
+  m.def("fast_unique2", &FastUnique<uint32_t, uint32_t>);
 
   py::class_<TableWrap>(m, "Table")
       .def(py::init<const std::string&, const std::optional<std::string>&>())
       .def("print_meta", &TableWrap::PrintMeta)
       .def("get_meta_wire", &TableWrap::GetMetaWire)
       .def("append_data", &TableWrap::AppendData)
-      .def("resolve_str_refs", &TableWrap::ResolveStrRefs)
+      .def("resolve_str_refs", &TableWrap::ResolveStrRefs, py::arg( "str_refs"), py::arg( "throw_if_not_found") = false)
       .def("mint_str_refs", &TableWrap::MintStrRefs)
       .def("query", &TableWrap::Query);
 }
