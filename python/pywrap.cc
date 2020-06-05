@@ -169,14 +169,14 @@ class TableWrap {
     return FromRawColumns(*res);
   }
 
-  void AppendData(const PyColumns& columns) {
+  void AppendData(const PyColumns& columns, AppendDataMode append_data_mode = kAppend) {
     if (columns.size() != column_meta_.size()) {
       throw py::value_error(absl::StrFormat("All columns must be provided when appending data, expected %d columns, got %d",
                                          column_meta_.size(),
                                          columns.size()));
     }
     RawColumns raw_columns = ToRawColumns(columns);
-    table_->AppendData(raw_columns);
+    table_->AppendData(raw_columns, append_data_mode);
   }
 
   std::vector<std::optional<std::string>> ResolveStrRefs(const std::vector<StrRef>& str_refs, bool throw_if_not_found) const {
@@ -282,9 +282,9 @@ class TableWrap {
 
     std::vector<ssize_t> strides = {column_meta.dtype.itemsize()};
     std::vector<ssize_t> shape = {num_rows};
-    spdlog::info("Constructing column");
+//    spdlog::info("Constructing column");
     py::capsule free_when_done(raw_column_data->data, [](void* f) {
-      spdlog::info("Freeing column");
+//      spdlog::info("Freeing column");
       char* foo = reinterpret_cast<char*>(f);
       delete[] foo;
     });
@@ -301,7 +301,7 @@ class TableWrap {
 
 };
 
-PYBIND11_MODULE(pywrap, m) {
+PYBIND11_MODULE(pydb_cc, m) {
   m.def("add", &add, R"pbdoc(
         Add two numbers
         Some other explanation about the add function.
@@ -310,16 +310,24 @@ PYBIND11_MODULE(pywrap, m) {
   m.def("show", &show);
   m.def("check", &check);
   m.def("fast_unique", &FastUnique<uint32_t, uint32_t>);
-  m.def("fast_unique2", &FastUnique<uint32_t, uint32_t>);
+
+  py::enum_<AppendDataMode>(m, "AppendDataMode")
+      .value("Append", kAppend)
+      .value("TruncateExisting", kTruncateExisting)
+      .value("TruncateExistingOverlap", kTruncateExistingOverlap)
+      .value("SkipOverlap", kSkipOverlap)
+      .export_values();
 
   py::class_<TableWrap>(m, "Table")
       .def(py::init<const std::string&, const std::optional<std::string>&>())
       .def("print_meta", &TableWrap::PrintMeta)
       .def("get_meta_wire", &TableWrap::GetMetaWire)
-      .def("append_data", &TableWrap::AppendData)
-      .def("resolve_str_refs", &TableWrap::ResolveStrRefs, py::arg( "str_refs"), py::arg( "throw_if_not_found") = false)
+      .def("append_data", &TableWrap::AppendData, py::arg("columns"), py::arg("append_data_mode") = kAppend)
+      .def("resolve_str_refs", &TableWrap::ResolveStrRefs, py::arg("str_refs"), py::arg( "throw_if_not_found") = false)
       .def("mint_str_refs", &TableWrap::MintStrRefs)
       .def("query", &TableWrap::Query);
+
+
 }
 
 }  // namespace

@@ -140,9 +140,15 @@ size_t c_lower_bound(const int64_t* start, const int64_t* end, int64_t value);
 
 size_t GetTypeSize(proto::ColumnSchema::Type type);
 
+enum AppendDataMode {
+  kAppend,
+  kTruncateExisting,
+  kTruncateExistingOverlap,
+  kSkipOverlap,
+};
+
 class SubTable {
  public:
-
   SubTable(const std::string& root_table_dir,
            const proto::Table& table_meta,
            const proto::SubTableId& sub_table_id)
@@ -197,37 +203,57 @@ class SubTable {
     return result;
   }
 
-  void AppendData(const RawColumns& column_data, bool force_recover_mess = true) {
+  void AppendData(const RawColumns& column_data, AppendDataMode append_mode = kAppend) {
     absl::WriterMutexLock lock(&mu_);
     // This condition should be checked at the Table level and not check-fail if not satisfied (but rather throw).
     GOOGLE_CHECK_EQ(column_data.size(),
                     column_meta_.size() - table_meta_.schema().tag_column_size())
             << "Must specify data for all non-tag columns!";
 
-    if (force_recover_mess) {
-      WriteProto(lock_path_, proto::Dummy());
-    }
     if (std::filesystem::exists(lock_path_)) {
       // Bring back the consistent state. The loaded meta is consistent.
       RecoverMess();
     }
 
+    // Here handle extra truncation...
+    if (append_mode == kTruncateExisting) {
+      SafeTruncateTable(0);
+    }
     RawColumnData time_column = column_data.at(table_meta_.schema().time_column());
     const size_t num_extra_rows = time_column.size / sizeof(int64_t);
     if (num_extra_rows == 0) {
       return;
     }
     auto* time = reinterpret_cast<int64_t*>(time_column.data);
+
+    if (append_mode == kTruncateExistingOverlap && time[0] >= index_.last_ts) {
+      proto::TimeSelector time_selector;
+      // Get the position of the element equal to the first time value of the appended column_data.
+      time_selector.set_start(time[0]);
+      size_t
+          no_overlap_len = QueryTimeSpan(time_selector, /*return_time_column=*/false).first.first;
+      // Truncate to this element.
+      SafeTruncateTable(no_overlap_len);
+    }
+    size_t num_accepted_rows = 0;
+
     int64_t index_density = table_meta_.index_density();
     for (size_t i = 0; i < num_extra_rows; ++i) {
       if (time[i] < index_.last_ts) {
+        if (append_mode == kSkipOverlap) {
+          if (num_accepted_rows) {
+            throw std::invalid_argument(absl::StrFormat(
+                "Overlap was skipped, accepted %d rows so far, but it seems like there are out of order rows afterwards at position %d", num_accepted_rows, i));
+          }
+          continue;
+        }
         // Restore the index.
         InitIndex();
         throw std::invalid_argument(absl::StrFormat(
-            "Out of range timestamp for sub table %s, latest inserted was %d, tried to insert %d",
+            "Out of range timestamp for sub table %s, latest inserted was %d, tried to insert %d (append mode: %d)",
             meta_.id().id(),
             index_.last_ts,
-            time[i]));
+            time[i], append_mode));
       }
       index_.last_ts = time[i];
       if (index_.num_rows % index_density == 0) {
@@ -236,15 +262,27 @@ class SubTable {
         index_.pos.push_back(index_.num_rows);
       }
       index_.num_rows++;
+      num_accepted_rows++;
+    }
+    if (num_accepted_rows == 0) {
+      return;
     }
     WriteProto(lock_path_, proto::Dummy());
-
+    size_t row_skip = num_extra_rows - num_accepted_rows;
+    if (append_mode != kSkipOverlap) {
+      GOOGLE_CHECK_EQ(row_skip, 0);
+    }
     try {
       for (const auto&[column_name, raw_column_data] : column_data) {
         const ColumnMeta& column_meta = column_meta_.at(column_name);
         GOOGLE_CHECK_EQ(column_meta.row_size * num_extra_rows, raw_column_data.size)
                 << "Bad data size for column: " << column_name;
-        AppendRawColumnData(column_meta, raw_column_data);
+        size_t byte_skip = row_skip * column_meta.row_size;
+        GOOGLE_CHECK_GT(raw_column_data.size, byte_skip);
+        AppendRawColumnData(column_meta, RawColumnData{
+            .data=raw_column_data.data + byte_skip,
+            .size=raw_column_data.size - byte_skip,
+        });
       }
 
     } catch (...) {
@@ -265,10 +303,28 @@ class SubTable {
     GOOGLE_CHECK(std::filesystem::remove(lock_path_));
   }
 
- private:
+  void TruncateAll() {
+    mu_.AssertNotHeld();
+    absl::WriterMutexLock lock(&mu_);
+    SafeTruncateTable(0);
+  }
 
-  void RecoverMess() {
-    size_t num_rows = index_.num_rows;
+ private:
+  void SafeTruncateTable(size_t num_rows) {
+    mu_.AssertHeld();
+    TruncateIndex(num_rows);
+    UpdateMeta();
+    WriteProto(lock_path_, proto::Dummy());
+    WriteMeta();
+    // At this point the table is truncated, even if below fails.
+    TruncateData(num_rows);
+    GOOGLE_CHECK_EQ(index_.num_rows, num_rows);
+    GOOGLE_CHECK(std::filesystem::remove(lock_path_));
+  }
+
+  // Truncates the tables on disk, ensure to first truncate and write index and create a mess lock.
+  void TruncateData(size_t num_rows) {
+    mu_.AssertHeld();
     for (const auto&[column_name, column_meta] : column_meta_) {
       if (column_meta.path.empty()) {
         // Not stored.
@@ -284,6 +340,35 @@ class SubTable {
       // added data.
       std::filesystem::resize_file(column_meta.path, expected_size);
     }
+  }
+
+  // Truncates index_, does not write the updated index to disk.
+  void TruncateIndex(size_t num_rows) {
+    mu_.AssertHeld();
+    if (num_rows == 0) {
+      index_ = {};
+      return;
+    }
+    index_.num_rows = num_rows;
+    size_t truncate_to = 0;
+    for (size_t pos : index_.pos) {
+      if (pos > num_rows) {
+        break;
+      }
+      ++truncate_to;
+    }
+    index_.pos.resize(truncate_to);
+    index_.value.resize(truncate_to);
+    RawColumnData last_time =
+        ReadRawColumnSingle(column_meta_.at(table_meta_.schema().time_column()),
+                            {num_rows - 1, num_rows});
+    auto* last_time_arr = reinterpret_cast<int64_t*>(last_time.data);
+    index_.last_ts = last_time_arr[0];
+    delete[] last_time.data;
+  }
+
+  void RecoverMess() {
+    TruncateData(index_.num_rows);
   }
 
   void InitMeta(const proto::SubTableId& sub_table_id) {
@@ -653,7 +738,7 @@ class Table {
     return sub_table_unique_index_[index_entry];
   }
 
-  void AppendData(const RawColumns& column_data) {
+  void AppendData(const RawColumns& column_data, AppendDataMode append_data_mode = kAppend) {
     // Thread safe, sub tables handle the thread safety independently.
     const size_t total_rows = column_data.at(meta_.schema().time_column()).size / sizeof(int64_t);
     if (!total_rows) {
@@ -663,10 +748,11 @@ class Table {
     std::vector<StrRef> last_sub_table_selector;
     size_t last_start = 0;
     auto append_span =
-        [this, &column_data](const std::vector<StrRef>& selector, const Span& row_span) {
+        [this, append_data_mode, &column_data](const std::vector<StrRef>& selector,
+                                               const Span& row_span) {
           SubTable* sub_table = this->GetOrCreateSubTable(selector);
           GOOGLE_CHECK(sub_table);
-          this->AppendRowSpanToSubTable(column_data, row_span, sub_table);
+          this->AppendRowSpanToSubTable(column_data, row_span, append_data_mode, sub_table);
         };
 
     for (const auto& tag_column_name : meta_.schema().tag_column()) {
@@ -695,6 +781,7 @@ class Table {
 
   void AppendRowSpanToSubTable(const RawColumns& column_data,
                                const Span& row_span,
+                               AppendDataMode append_data_mode,
                                SubTable* sub_table) {
     RawColumns sub_column_data;
     const size_t total_rows = column_data.at(meta_.schema().time_column()).size / sizeof(int64_t);
@@ -713,7 +800,7 @@ class Table {
           .size = (row_span.second - row_span.first) * item_size,
       };
     }
-    sub_table->AppendData(sub_column_data);
+    sub_table->AppendData(sub_column_data, append_data_mode);
   }
 
   static RawColumnData MergeColumnSubResults(const std::vector<RawColumnData>& column_sub_results) {

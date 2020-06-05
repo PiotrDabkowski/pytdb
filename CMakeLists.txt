@@ -46,9 +46,9 @@ target_link_libraries(table_lib PRIVATE proto ${Protobuf_LIBRARIES} absl::string
 add_executable(tst test.cc)
 target_link_libraries(tst proto ${Protobuf_LIBRARIES} table_lib gtest gmock gtest_main ${LINUX_EXTRA_LIBS} absl::flat_hash_map)
 
-pybind11_add_module(pywrap python/pywrap.cc)
+pybind11_add_module(pydb_cc python/pywrap.cc)
 
-target_link_libraries(pywrap PRIVATE  table_lib proto ${Protobuf_LIBRARIES} absl::strings absl::str_format absl::flat_hash_map)
+target_link_libraries(pydb_cc PRIVATE  table_lib proto ${Protobuf_LIBRARIES} absl::strings absl::str_format absl::flat_hash_map)
 
 #target_link_libraries(${target_name} PRIVATE )
 #

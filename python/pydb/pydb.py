@@ -1,18 +1,18 @@
 import sys
 import os
-import numpy as np
-import time
 from typing import Optional, Dict, List
 import pandas as pd
 import numpy as np
-sys.path.insert(0,
-                os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cmake-build-release"))
 
-import pywrap
+# The wrappers over cc library are a separate module, compiled separately.
+import pydb_cc
+# The pb should be also compiled separately...
 from . import table_pb2
 import time
 
 DT_STR_REF = np.dtype("uint32")
+
+AppendDataMode = pydb_cc.AppendDataMode
 
 class Table:
     def __init__(self, db_root_dir, table_name: str, time_column: str = None,
@@ -34,7 +34,7 @@ class Table:
         else:
             self.config = None
 
-        self.table = pywrap.Table(self.table_path,
+        self.table = pydb_cc.Table(self.table_path,
                                   self.config.SerializeToString() if self.config is not None else None)
         self._update_config()
         self.columns = self._get_columns_from_schema(self.config.schema)
@@ -116,7 +116,7 @@ class Table:
         if arr.dtype != DT_STR_REF:
             raise ValueError("Returned tag column does not have a str_ref type!")
         # Just like np.unique but 10x faster for a large number of dups, and comparable otherwise.
-        unique_refs, inverse = pywrap.fast_unique(arr)
+        unique_refs, inverse = pydb_cc.fast_unique(arr)
         return np.array(self.table.resolve_str_refs(unique_refs, throw_if_not_found=True), dtype=np.dtype("object"))[inverse]
 
     def _encode_str_ref_column(self, arr: np.ndarray) -> np.ndarray:
@@ -140,7 +140,7 @@ class Table:
             response[self.time_column] = self._ns64_to_time(response[self.time_column])
         return pd.DataFrame(response, columns=selector.column)
 
-    def append_data_df(self, df: pd.DataFrame, sort=False):
+    def append_data_df(self, df: pd.DataFrame, sort=False, append_data_mode: AppendDataMode = AppendDataMode.Append):
         if set(df.columns) != self.columns_set:
             raise ValueError("Data frame to append needs to contain all the columns in the table and nothing else, expected %s, got %s" % (self.columns_set, set(df.columns)))
         if sort:
@@ -165,7 +165,7 @@ class Table:
             else:
                 # Value column.
                 converted_columns[column_name] = maybe_convert_column(value, np.dtype("float32"))
-        self.table.append_data(converted_columns)
+        self.table.append_data(converted_columns, append_data_mode)
 
 
 
