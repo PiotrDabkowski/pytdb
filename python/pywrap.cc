@@ -12,6 +12,8 @@ namespace {
 
 namespace py = pybind11;
 
+using PyColumns = std::unordered_map<std::string, py::array>;
+
 int add(int i, int j) {
   return i + j;
 }
@@ -23,14 +25,110 @@ std::string show() {
 }
 
 template<typename T>
-py::array_t<T> MakeNpArray(size_t size, T* data) {
+py::array_t<T> MakeNpArray(std::vector<ssize_t> shape, T* data) {
+
+  std::vector<ssize_t> strides(shape.size());
+  size_t v = sizeof(T);
+  size_t i = shape.size();
+  while (i--) {
+    strides[i] = v;
+    v *= shape[i];
+  }
   py::capsule free_when_done(data, [](void* f) {
     auto* foo = reinterpret_cast<T*>(f);
     delete[] foo;
   });
-  std::vector<ssize_t> shape = {static_cast<ssize_t>(size)};
-  std::vector<ssize_t> strides = {static_cast<ssize_t>(sizeof(T))};
   return py::array_t<T>(shape, strides, data, free_when_done);
+}
+
+template<typename T>
+py::array_t<T> MakeEmptyNpArray(std::vector<ssize_t> shape) {
+  size_t size = 1;
+  for (auto s : shape) {
+    size *= s;
+  }
+  T* data = new T[size];
+  return ConstructNumpyArr(data, shape);
+}
+
+py::array_t<float> BundleTable(const PyColumns& table_data,
+                               const PyColumns& valid_indicators,
+                               const std::vector<std::string>& indicators,
+                               const std::vector<std::string> features) {
+  if (table_data.empty()) {
+    throw py::value_error("table_data cannot be empty");
+  }
+  std::vector<ssize_t> shape;
+  std::vector<const int64_t*> indicator_arrs;
+  std::vector<absl::flat_hash_map<int64_t, size_t>> valid_indicator_mappings;
+  const size_t num_rows = table_data.begin()->second.size();
+  for (const auto& indicator : indicators) {
+    const auto& valid_col = valid_indicators.at(indicator);
+    GOOGLE_CHECK_EQ(valid_col.ndim(), 1) << "Indicator must be int64";
+    GOOGLE_CHECK_EQ(valid_col.dtype().kind(), 'i') << "Indicator must be int64";
+    GOOGLE_CHECK_EQ(valid_col.dtype().itemsize(), 8) << "Indicator must be int64";
+    shape.push_back(valid_indicators.at(indicator).size());
+    const auto* valids = reinterpret_cast<const int64_t*>(valid_col.data());
+    absl::flat_hash_map<int64_t, size_t> mapping;
+    for (size_t i = 0; i < valid_col.size(); ++i) {
+      mapping[valids[i]] = i;
+    }
+    valid_indicator_mappings.push_back(std::move(mapping));
+
+    const auto& indicator_col = table_data.at(indicator);
+    GOOGLE_CHECK_EQ(indicator_col.ndim(), 1) << "Indicator must be int64";
+    GOOGLE_CHECK_EQ(indicator_col.size(), num_rows) << "Inconsistent number of rows";
+    GOOGLE_CHECK_EQ(indicator_col.dtype().kind(), 'i') << "Indicator must be int64";
+    GOOGLE_CHECK_EQ(indicator_col.dtype().itemsize(), 8) << "Indicator must be int64";
+    indicator_arrs.push_back(reinterpret_cast<const int64_t*>(indicator_col.data()));
+  }
+
+  shape.push_back(features.size());
+  std::vector<const float*> feature_arrs;
+  for (const auto& feature : features) {
+    const auto& feature_col = table_data.at(feature);
+    GOOGLE_CHECK_EQ(feature_col.ndim(), 1) << "Feature must be float32";
+    GOOGLE_CHECK_EQ(feature_col.size(), num_rows) << "Inconsistent number of rows";
+    GOOGLE_CHECK_EQ(feature_col.dtype().kind(), 'f') << "Feature must be float32";
+    GOOGLE_CHECK_EQ(feature_col.dtype().itemsize(), 4) << "Feature must be float32";
+    feature_arrs.push_back(reinterpret_cast<const float*>(feature_col.data()));
+  }
+
+  std::vector<size_t> strides(shape.size());
+  size_t num_items;
+  {
+    size_t v = 1;
+    size_t i = strides.size();
+    while (i--) {
+      strides[i] = v;
+      v *= shape[i];
+    }
+    num_items = v;
+  }
+  float* data = new float[num_items];
+  // Zero the result.
+  std::memset(data, 0, sizeof(float) * num_items);
+
+  for (size_t i = 0; i < num_rows; ++i) {
+    bool is_valid = true;
+    size_t position = 0;
+    for (size_t ind = 0; ind < indicator_arrs.size(); ++ind) {
+      const auto it = valid_indicator_mappings[ind].find(indicator_arrs[ind][i]);
+      if (it == valid_indicator_mappings[ind].end()) {
+        is_valid = false;
+        break;
+      }
+      position += it->second * strides[ind];
+    }
+    if (!is_valid) {
+      continue;
+    }
+    for (size_t feature_id = 0; feature_id < feature_arrs.size(); ++feature_id) {
+      data[position + feature_id] = feature_arrs[feature_id][i];
+    }
+  }
+
+  return MakeNpArray(shape, data);
 }
 
 template<typename T, typename IDX_T = uint64_t>
@@ -42,9 +140,10 @@ py::tuple FastUnique(const py::array_t<T>& arr) {
     return py::make_tuple(py::array_t<T>(), py::array_t<T>());
   }
   if (std::numeric_limits<IDX_T>::max() <= arr.shape(0)) {
-    throw py::value_error(absl::StrFormat("Index type too small, can hold at most %d, but array is %d",
-                                          std::numeric_limits<IDX_T>::max(),
-                                          arr.shape(0)));
+    throw py::value_error(absl::StrFormat(
+        "Index type too small, can hold at most %d, but array is %d",
+        std::numeric_limits<IDX_T>::max(),
+        arr.shape(0)));
   }
   IDX_T size = arr.shape(0);
   IDX_T hint = std::min(size / 100, static_cast<IDX_T>(1000));
@@ -72,7 +171,10 @@ py::tuple FastUnique(const py::array_t<T>& arr) {
 
   auto* unique_elems_buf = new T[vals.size()];
   std::memcpy(unique_elems_buf, vals.data(), sizeof(T) * vals.size());
-  return py::make_tuple(MakeNpArray(vals.size(), unique_elems_buf), MakeNpArray(size, inv));
+
+  std::vector<ssize_t> vals_shape = {static_cast<ssize_t>(vals.size())};
+  std::vector<ssize_t> inv_shape = {static_cast<ssize_t>(size)};
+  return py::make_tuple(MakeNpArray(vals_shape, unique_elems_buf), MakeNpArray(inv_shape, inv));
 }
 
 int check(const std::optional<std::string>& x) {
@@ -97,7 +199,7 @@ std::optional<T> DeserializeProto(const std::optional<py::bytes>& wire) {
 class TableWrap {
  public:
   // Shares the underlying data buffers, zero copy between cpp and py.
-  using PyColumns = std::unordered_map<std::string, py::array>;
+
   struct ColumnMeta {
     std::string name;
     proto::ColumnSchema::Type type;
@@ -171,15 +273,17 @@ class TableWrap {
 
   void AppendData(const PyColumns& columns, AppendDataMode append_data_mode = kAppend) {
     if (columns.size() != column_meta_.size()) {
-      throw py::value_error(absl::StrFormat("All columns must be provided when appending data, expected %d columns, got %d",
-                                         column_meta_.size(),
-                                         columns.size()));
+      throw py::value_error(absl::StrFormat(
+          "All columns must be provided when appending data, expected %d columns, got %d",
+          column_meta_.size(),
+          columns.size()));
     }
     RawColumns raw_columns = ToRawColumns(columns);
     table_->AppendData(raw_columns, append_data_mode);
   }
 
-  std::vector<std::optional<std::string>> ResolveStrRefs(const std::vector<StrRef>& str_refs, bool throw_if_not_found) const {
+  std::vector<std::optional<std::string>> ResolveStrRefs(const std::vector<StrRef>& str_refs,
+                                                         bool throw_if_not_found) const {
     auto resolved = table_->ResolveStringRefs(str_refs);
     std::vector<std::optional<std::string>> result;
     result.reserve(resolved.size());
@@ -189,7 +293,9 @@ class TableWrap {
         result.push_back(*res);
       } else {
         if (throw_if_not_found) {
-          throw py::value_error(absl::StrFormat("Could not resolve str ref: %d (did you remember to mint it?)", str_refs.at(i)));
+          throw py::value_error(absl::StrFormat(
+              "Could not resolve str ref: %d (did you remember to mint it?)",
+              str_refs.at(i)));
         }
         result.push_back({});
       }
@@ -198,7 +304,6 @@ class TableWrap {
     return result;
   }
 
-
   std::vector<StrRef> MintStrRefs(const std::vector<std::string>& strings) {
     return table_->MintStringRefs(strings);
   }
@@ -206,7 +311,8 @@ class TableWrap {
  private:
   py::dtype GetDtype(const ColumnMeta& meta) {
     if (meta.width != 1) {
-      throw py::value_error(absl::StrFormat("Column width must currently be 1, got %d", meta.width));
+      throw py::value_error(absl::StrFormat("Column width must currently be 1, got %d",
+                                            meta.width));
     }
     switch (meta.type) {
       case proto::ColumnSchema::FLOAT:return py::dtype("float32");
@@ -230,9 +336,10 @@ class TableWrap {
       if (!num_rows) {
         num_rows = column.shape(0);
       } else if (*num_rows != column.shape(0)) {
-        throw py::value_error(absl::StrFormat("Inconsistent number of rows between columns, seen both %d and %d",
-                                           *num_rows,
-                                           column.shape(0)));
+        throw py::value_error(absl::StrFormat(
+            "Inconsistent number of rows between columns, seen both %d and %d",
+            *num_rows,
+            column.shape(0)));
       }
       if (!column_meta_.contains(name)) {
         throw py::value_error(absl::StrFormat("Column '%s' not in schema", name));
@@ -240,16 +347,18 @@ class TableWrap {
       // Validate dtype.
       const auto& meta = column_meta_.at(name);
       if (column.dtype().kind() != meta.dtype.kind()) {
-        throw py::value_error(absl::StrFormat("Unexpected dtype.kind for column '%s', expected '%c', got '%c'",
-                                              name,
-                                              meta.dtype.kind(),
-                                              column.dtype().kind()));
+        throw py::value_error(absl::StrFormat(
+            "Unexpected dtype.kind for column '%s', expected '%c', got '%c'",
+            name,
+            meta.dtype.kind(),
+            column.dtype().kind()));
       }
       if (column.dtype().itemsize() != meta.dtype.itemsize()) {
-        throw py::value_error(absl::StrFormat("Unexpected dtype.itemsize for column '%s', expected %d, got %d",
-                                              name,
-                                              meta.dtype.itemsize(),
-                                              column.dtype().itemsize()));
+        throw py::value_error(absl::StrFormat(
+            "Unexpected dtype.itemsize for column '%s', expected %d, got %d",
+            name,
+            meta.dtype.itemsize(),
+            column.dtype().itemsize()));
       }
       if (column.nbytes() != (*num_rows) * column.dtype().itemsize()) {
         throw std::runtime_error(absl::StrFormat("Unexpected data size for column %s", name));
@@ -310,6 +419,7 @@ PYBIND11_MODULE(pydb_cc, m) {
   m.def("show", &show);
   m.def("check", &check);
   m.def("fast_unique", &FastUnique<uint32_t, uint32_t>);
+  m.def("bundle_table", &BundleTable, py::arg("table_data"), py::arg("valid_indicators"), py::arg("indicators"), py::arg("features"));
 
   py::enum_<AppendDataMode>(m, "AppendDataMode")
       .value("Append", kAppend)
@@ -322,11 +432,16 @@ PYBIND11_MODULE(pydb_cc, m) {
       .def(py::init<const std::string&, const std::optional<std::string>&>())
       .def("print_meta", &TableWrap::PrintMeta)
       .def("get_meta_wire", &TableWrap::GetMetaWire)
-      .def("append_data", &TableWrap::AppendData, py::arg("columns"), py::arg("append_data_mode") = kAppend)
-      .def("resolve_str_refs", &TableWrap::ResolveStrRefs, py::arg("str_refs"), py::arg( "throw_if_not_found") = false)
+      .def("append_data",
+           &TableWrap::AppendData,
+           py::arg("columns"),
+           py::arg("append_data_mode") = kAppend)
+      .def("resolve_str_refs",
+           &TableWrap::ResolveStrRefs,
+           py::arg("str_refs"),
+           py::arg("throw_if_not_found") = false)
       .def("mint_str_refs", &TableWrap::MintStrRefs)
       .def("query", &TableWrap::Query);
-
 
 }
 

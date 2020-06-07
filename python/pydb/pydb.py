@@ -156,10 +156,10 @@ class Table:
             if column_name in self.tag_columns:
                 if value.dtype == np.dtype("object"):
                     converted_columns[column_name] = self._encode_str_ref_column(value)
-                elif value.dtype == DT_STR_REF:
-                    converted_columns[column_name] = value
+                elif value.dtype.kind in ("u", "i"):
+                    converted_columns[column_name] = maybe_convert_column(value, DT_STR_REF)
                 else:
-                    raise ValueError("Invalid dtype of tag column %s, expected either object or %s" % (column_name, DT_STR_REF))
+                    raise ValueError("Invalid dtype of tag column %s, expected either object or integer dtype" % column_name)
             elif column_name == self.time_column:
                 converted_columns[column_name] = maybe_convert_column(value, np.dtype("int64"))
             else:

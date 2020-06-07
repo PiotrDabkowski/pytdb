@@ -643,7 +643,8 @@ class Table {
     sub_tables_.reserve(meta_.sub_table_id_size());
     if (table_meta) {
       meta_ = *table_meta;
-      if (ReadProtoSafe(meta_path_, &meta_)) {
+      bool table_exists = ReadProtoSafe(meta_path_, &meta_);
+      if (table_exists) {
         if (table_meta->schema().SerializeAsString() != GetMeta().schema().SerializeAsString()) {
           throw std::invalid_argument(absl::StrFormat(
               "Table at %s already exists, but the provided table schema is not consistent: \nexisting: '%s'\nprovided: '%s'",
@@ -652,8 +653,9 @@ class Table {
               table_meta->schema().DebugString()));
         }
 
+      } else {
+        WriteProtoSafe(meta_path_, meta_);
       }
-      WriteProtoSafe(meta_path_, meta_);
     } else {
       if (!ReadProtoSafe(meta_path_, &meta_)) {
         throw std::invalid_argument(absl::StrFormat(
