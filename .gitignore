@@ -5,6 +5,10 @@
 .idea
 googletest
 abseil-cpp
+pybind11
+
+Bench*
+bench*
 
 # Compiled Object files
 *.slo
