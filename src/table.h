@@ -14,7 +14,6 @@
 #include "absl/container/node_hash_map.h"
 #include "absl/strings/str_format.h"
 #include "absl/synchronization/mutex.h"
-#include "spdlog/spdlog.h"
 #include "proto/table.pb.h"
 
 namespace pytdb {
@@ -96,7 +95,7 @@ bool ReadProto(const std::string& path, T* proto) {
 template<typename T>
 bool ReadProtoSafe(const std::string& path, T* proto) {
   if (std::filesystem::exists(absl::StrCat(path, ".lock"))) {
-    spdlog::error(absl::StrCat("[Read] File %s is corrupted, reading backup.", path));
+//    spdlog::error(absl::StrCat("[Read] File %s is corrupted, reading backup.", path));
     return ReadProto(absl::StrCat(path, ".back"), proto);
   }
   return ReadProto(path, proto);
@@ -106,7 +105,7 @@ template<typename T>
 void WriteProtoSafe(const std::string& path, const T& proto) noexcept {
   try {
     if (std::filesystem::exists(absl::StrCat(path, ".lock"))) {
-      spdlog::error(absl::StrCat("[Write] File %s is corrupted, recovering.", path));
+//      spdlog::error(absl::StrCat("[Write] File %s is corrupted, recovering.", path));
       WriteProto(path, proto);
     } else {
       WriteProto(absl::StrCat(path, ".back"), proto);
@@ -165,7 +164,6 @@ class SubTable {
 
   std::optional<RawColumns> Query(const proto::Selector& selector) const {
     absl::ReaderMutexLock lock(&mu_);
-    spdlog::debug("New query arrived...");
     absl::flat_hash_set<std::string> columns_to_query;
     for (const auto& column_name : selector.column()) {
       columns_to_query.insert(column_name);
@@ -181,7 +179,6 @@ class SubTable {
 
     std::tie(query_span, time_column_data) =
         QueryTimeSpan(selector.time_selector(), return_time_column);
-    spdlog::debug("query_span is {}->{}", query_span.first, query_span.second);
 
     if (query_span == kEmptySpan) {
       // No results for this query.
@@ -194,7 +191,6 @@ class SubTable {
     if (return_time_column) {
       result[time_column_name] = time_column_data;
     }
-    spdlog::debug("Done, query had results.");
     return result;
   }
 
@@ -238,7 +234,9 @@ class SubTable {
         if (append_mode == kSkipOverlap) {
           if (num_accepted_rows) {
             throw std::invalid_argument(absl::StrFormat(
-                "Overlap was skipped, accepted %d rows so far, but it seems like there are out of order rows afterwards at position %d", num_accepted_rows, i));
+                "Overlap was skipped, accepted %d rows so far, but it seems like there are out of order rows afterwards at position %d",
+                num_accepted_rows,
+                i));
           }
           continue;
         }
@@ -248,7 +246,8 @@ class SubTable {
             "Out of range timestamp for sub table %s, latest inserted was %d, tried to insert %d (append mode: %d)",
             meta_.id().id(),
             index_.last_ts,
-            time[i], append_mode));
+            time[i],
+            append_mode));
       }
       index_.last_ts = time[i];
       if (index_.num_rows % index_density == 0) {
@@ -458,7 +457,9 @@ class SubTable {
                                                bool return_time_column) const {
     const std::string& time_column_name = table_meta_.schema().time_column();
     if (time_selector.has_last_n()) {
-      const Span selected_span = {index_.num_rows -  std::min(time_selector.last_n(), index_.num_rows), index_.num_rows};
+      const Span selected_span =
+          {index_.num_rows - std::min(static_cast<size_t>(time_selector.last_n()), index_.num_rows),
+           index_.num_rows};
       return {
           selected_span,
           ReadRawColumnSingle(column_meta_.at(time_column_name), selected_span)
@@ -466,12 +467,12 @@ class SubTable {
     }
 
     Span coarse_span = QueryCoarseTimeSpanFromIndex(time_selector);
-    spdlog::debug("coarse query_span is {}->{}", coarse_span.first, coarse_span.second);
 
     if (coarse_span.first >= coarse_span.second) {
       return {kEmptySpan, {}};
     }
-    RawColumnData raw_coarse_time = ReadRawColumnSingle(column_meta_.at(time_column_name), coarse_span);
+    RawColumnData
+        raw_coarse_time = ReadRawColumnSingle(column_meta_.at(time_column_name), coarse_span);
     auto* coarse_time = reinterpret_cast<int64_t*>(raw_coarse_time.data);
     const size_t num_rows = coarse_span.second - coarse_span.first;
     GOOGLE_CHECK_EQ(raw_coarse_time.size, sizeof(int64_t) * num_rows);
@@ -489,7 +490,6 @@ class SubTable {
       }
       start += coarse_span.first;
     } else {
-      spdlog::debug("No query start!");
       start = 0;
     }
 
@@ -533,7 +533,6 @@ class SubTable {
   // reading actual time data from memory.
   Span QueryCoarseTimeSpanFromIndex(const proto::TimeSelector& time_selector) const {
     if (index_.num_rows == 0) {
-      spdlog::debug("No rows in table, query result will be empty.");
       return kEmptySpan;
     }
     if (time_selector.has_end() && index_.value.at(0) > time_selector.end()) {
@@ -665,7 +664,6 @@ class Table {
             meta_path_));
       }
     }
-    spdlog::debug(meta_.DebugString());
 
     LoadStringRefs();
     for (const auto& sub_table_id : meta_.sub_table_id()) {
@@ -694,7 +692,7 @@ class Table {
     for (SubTable* sub_table : sub_tables) {
       if (result_size > (1UL << 30UL)) {
         // Bail out if the result is over 1GB, bad query? TODO: Improve error handling in general.
-        spdlog::error("Query result too large, returning first 1GB...");
+//        spdlog::error("Query result too large, returning first 1GB...");
         break;
       }
       auto sub_query_result = sub_table->Query(selector);
@@ -982,7 +980,7 @@ class Table {
   }
 
   void IndexSubTable(SubTable* sub_table) {
-    spdlog::debug("Indexing table {}", sub_table->GetId().id());
+//    spdlog::debug("Indexing table {}", sub_table->GetId().id());
     const std::string entry = GetUniqueIndexEntry(sub_table->GetId());
     GOOGLE_CHECK(!sub_table_unique_index_.contains(entry))
             << "Indexed table already exists: " << sub_table->GetId().id();

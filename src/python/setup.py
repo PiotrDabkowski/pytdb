@@ -5,9 +5,9 @@ except ImportError:
 
 setup(
     name='pytdb',
-    version='0.0.1',
+    version='0.0.2',
     packages=['pytdb'],
-    install_requires=[ "pytdb_cc>=0.0.2", "pandas", "numpy", "pytest"],
+    install_requires=[ "pytdb_cc>=0.0.5", "pandas", "numpy", "protobuf", "pytest"],
     author='Piotr Dabkowski',
     url='https://github.com/PiotrDabkowski/pytdb',
     description='Very fast and simple time series db, tightly integrated with Python and Pandas.'

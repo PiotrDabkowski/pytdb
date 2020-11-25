@@ -15,18 +15,18 @@ _sym_db = _symbol_database.Default()
 
 DESCRIPTOR = _descriptor.FileDescriptor(
   name='table.proto',
-  package='pydb.proto',
+  package='pytdb.proto',
   syntax='proto2',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\x0btable.proto\x12\npydb.proto\"\x16\n\x05\x44ummy\x12\r\n\x05\x64ummy\x18\x01 \x01(\t\"\x83\x01\n\x05Table\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\"\n\x06schema\x18\x02 \x01(\x0b\x32\x12.pydb.proto.Schema\x12,\n\x0csub_table_id\x18\x04 \x03(\x0b\x32\x16.pydb.proto.SubTableId\x12\x1a\n\rindex_density\x18\x05 \x01(\x03:\x03\x32\x35\x36\"v\n\x0cStringRefMap\x12\x36\n\x07mapping\x18\x01 \x03(\x0b\x32%.pydb.proto.StringRefMap.MappingEntry\x1a.\n\x0cMappingEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\xaa\x01\n\x0c\x43olumnSchema\x12\x0c\n\x04name\x18\x01 \x01(\t\x12+\n\x04type\x18\x02 \x01(\x0e\x32\x1d.pydb.proto.ColumnSchema.Type\x12\x10\n\x05width\x18\x03 \x01(\r:\x01\x31\"M\n\x04Type\x12\t\n\x05\x46LOAT\x10\x00\x12\n\n\x06\x44OUBLE\x10\x01\x12\t\n\x05INT32\x10\x02\x12\t\n\x05INT64\x10\x03\x12\x08\n\x04\x42YTE\x10\x04\x12\x0e\n\nSTRING_REF\x10\x05\"d\n\x06Schema\x12\x16\n\x0btime_column\x18\x01 \x01(\t:\x01t\x12\x12\n\ntag_column\x18\x02 \x03(\t\x12.\n\x0cvalue_column\x18\x03 \x03(\x0b\x32\x18.pydb.proto.ColumnSchema\"\x83\x01\n\nSubTableId\x12\n\n\x02id\x18\x01 \x01(\t\x12,\n\x03tag\x18\x02 \x03(\x0b\x32\x1f.pydb.proto.SubTableId.TagEntry\x12\x0f\n\x07str_tag\x18\x03 \x03(\t\x1a*\n\x08TagEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\r:\x02\x38\x01\"P\n\x08SubTable\x12\"\n\x02id\x18\x01 \x01(\x0b\x32\x16.pydb.proto.SubTableId\x12 \n\x05index\x18\x02 \x01(\x0b\x32\x11.pydb.proto.Index\"F\n\x05Index\x12\r\n\x05value\x18\x01 \x03(\x03\x12\x0b\n\x03pos\x18\x02 \x03(\x03\x12\x0f\n\x07last_ts\x18\x03 \x01(\x03\x12\x10\n\x08num_rows\x18\x04 \x01(\x04\"s\n\x0cTimeSelector\x12\r\n\x05start\x18\x01 \x01(\x03\x12\x1b\n\rinclude_start\x18\x02 \x01(\x08:\x04true\x12\x0b\n\x03\x65nd\x18\x03 \x01(\x03\x12\x1a\n\x0binclude_end\x18\x04 \x01(\x08:\x05\x66\x61lse\x12\x0e\n\x06last_n\x18\x05 \x01(\x04\"*\n\x0bTagSelector\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x03(\t\"T\n\x10SubTableSelector\x12-\n\x0ctag_selector\x18\x01 \x03(\x0b\x32\x17.pydb.proto.TagSelector\x12\x11\n\ttag_order\x18\x04 \x03(\t\"\x85\x01\n\x08Selector\x12\x38\n\x12sub_table_selector\x18\x01 \x01(\x0b\x32\x1c.pydb.proto.SubTableSelector\x12/\n\rtime_selector\x18\x02 \x01(\x0b\x32\x18.pydb.proto.TimeSelector\x12\x0e\n\x06\x63olumn\x18\x03 \x03(\t\"\x86\x02\n\x0bQueryResult\x12\x10\n\x08num_rows\x18\x01 \x01(\x03\x12/\n\rcolumn_schema\x18\x02 \x03(\x0b\x32\x18.pydb.proto.ColumnSchema\x12I\n\x12\x63olumn_binary_data\x18\x03 \x03(\x0b\x32-.pydb.proto.QueryResult.ColumnBinaryDataEntry\x12\x30\n\x0estring_ref_map\x18\x04 \x01(\x0b\x32\x18.pydb.proto.StringRefMap\x1a\x37\n\x15\x43olumnBinaryDataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x0c:\x02\x38\x01'
+  serialized_pb=b'\n\x0btable.proto\x12\x0bpytdb.proto\"\x16\n\x05\x44ummy\x12\r\n\x05\x64ummy\x18\x01 \x01(\t\"\x85\x01\n\x05Table\x12\x0c\n\x04name\x18\x01 \x01(\t\x12#\n\x06schema\x18\x02 \x01(\x0b\x32\x13.pytdb.proto.Schema\x12-\n\x0csub_table_id\x18\x04 \x03(\x0b\x32\x17.pytdb.proto.SubTableId\x12\x1a\n\rindex_density\x18\x05 \x01(\x03:\x03\x32\x35\x36\"w\n\x0cStringRefMap\x12\x37\n\x07mapping\x18\x01 \x03(\x0b\x32&.pytdb.proto.StringRefMap.MappingEntry\x1a.\n\x0cMappingEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\xab\x01\n\x0c\x43olumnSchema\x12\x0c\n\x04name\x18\x01 \x01(\t\x12,\n\x04type\x18\x02 \x01(\x0e\x32\x1e.pytdb.proto.ColumnSchema.Type\x12\x10\n\x05width\x18\x03 \x01(\r:\x01\x31\"M\n\x04Type\x12\t\n\x05\x46LOAT\x10\x00\x12\n\n\x06\x44OUBLE\x10\x01\x12\t\n\x05INT32\x10\x02\x12\t\n\x05INT64\x10\x03\x12\x08\n\x04\x42YTE\x10\x04\x12\x0e\n\nSTRING_REF\x10\x05\"e\n\x06Schema\x12\x16\n\x0btime_column\x18\x01 \x01(\t:\x01t\x12\x12\n\ntag_column\x18\x02 \x03(\t\x12/\n\x0cvalue_column\x18\x03 \x03(\x0b\x32\x19.pytdb.proto.ColumnSchema\"\x84\x01\n\nSubTableId\x12\n\n\x02id\x18\x01 \x01(\t\x12-\n\x03tag\x18\x02 \x03(\x0b\x32 .pytdb.proto.SubTableId.TagEntry\x12\x0f\n\x07str_tag\x18\x03 \x03(\t\x1a*\n\x08TagEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\r:\x02\x38\x01\"R\n\x08SubTable\x12#\n\x02id\x18\x01 \x01(\x0b\x32\x17.pytdb.proto.SubTableId\x12!\n\x05index\x18\x02 \x01(\x0b\x32\x12.pytdb.proto.Index\"F\n\x05Index\x12\r\n\x05value\x18\x01 \x03(\x03\x12\x0b\n\x03pos\x18\x02 \x03(\x03\x12\x0f\n\x07last_ts\x18\x03 \x01(\x03\x12\x10\n\x08num_rows\x18\x04 \x01(\x04\"s\n\x0cTimeSelector\x12\r\n\x05start\x18\x01 \x01(\x03\x12\x1b\n\rinclude_start\x18\x02 \x01(\x08:\x04true\x12\x0b\n\x03\x65nd\x18\x03 \x01(\x03\x12\x1a\n\x0binclude_end\x18\x04 \x01(\x08:\x05\x66\x61lse\x12\x0e\n\x06last_n\x18\x05 \x01(\x04\"*\n\x0bTagSelector\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x03(\t\"U\n\x10SubTableSelector\x12.\n\x0ctag_selector\x18\x01 \x03(\x0b\x32\x18.pytdb.proto.TagSelector\x12\x11\n\ttag_order\x18\x04 \x03(\t\"\x87\x01\n\x08Selector\x12\x39\n\x12sub_table_selector\x18\x01 \x01(\x0b\x32\x1d.pytdb.proto.SubTableSelector\x12\x30\n\rtime_selector\x18\x02 \x01(\x0b\x32\x19.pytdb.proto.TimeSelector\x12\x0e\n\x06\x63olumn\x18\x03 \x03(\t\"\x89\x02\n\x0bQueryResult\x12\x10\n\x08num_rows\x18\x01 \x01(\x03\x12\x30\n\rcolumn_schema\x18\x02 \x03(\x0b\x32\x19.pytdb.proto.ColumnSchema\x12J\n\x12\x63olumn_binary_data\x18\x03 \x03(\x0b\x32..pytdb.proto.QueryResult.ColumnBinaryDataEntry\x12\x31\n\x0estring_ref_map\x18\x04 \x01(\x0b\x32\x19.pytdb.proto.StringRefMap\x1a\x37\n\x15\x43olumnBinaryDataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x0c:\x02\x38\x01'
 )
 
 
 
 _COLUMNSCHEMA_TYPE = _descriptor.EnumDescriptor(
   name='Type',
-  full_name='pydb.proto.ColumnSchema.Type',
+  full_name='pytdb.proto.ColumnSchema.Type',
   filename=None,
   file=DESCRIPTOR,
   create_key=_descriptor._internal_create_key,
@@ -64,22 +64,22 @@ _COLUMNSCHEMA_TYPE = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=399,
-  serialized_end=476,
+  serialized_start=404,
+  serialized_end=481,
 )
 _sym_db.RegisterEnumDescriptor(_COLUMNSCHEMA_TYPE)
 
 
 _DUMMY = _descriptor.Descriptor(
   name='Dummy',
-  full_name='pydb.proto.Dummy',
+  full_name='pytdb.proto.Dummy',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
-      name='dummy', full_name='pydb.proto.Dummy.dummy', index=0,
+      name='dummy', full_name='pytdb.proto.Dummy.dummy', index=0,
       number=1, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=b"".decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
@@ -97,42 +97,42 @@ _DUMMY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=27,
-  serialized_end=49,
+  serialized_start=28,
+  serialized_end=50,
 )
 
 
 _TABLE = _descriptor.Descriptor(
   name='Table',
-  full_name='pydb.proto.Table',
+  full_name='pytdb.proto.Table',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
-      name='name', full_name='pydb.proto.Table.name', index=0,
+      name='name', full_name='pytdb.proto.Table.name', index=0,
       number=1, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=b"".decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='schema', full_name='pydb.proto.Table.schema', index=1,
+      name='schema', full_name='pytdb.proto.Table.schema', index=1,
       number=2, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='sub_table_id', full_name='pydb.proto.Table.sub_table_id', index=2,
+      name='sub_table_id', full_name='pytdb.proto.Table.sub_table_id', index=2,
       number=4, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='index_density', full_name='pydb.proto.Table.index_density', index=3,
+      name='index_density', full_name='pytdb.proto.Table.index_density', index=3,
       number=5, type=3, cpp_type=2, label=1,
       has_default_value=True, default_value=256,
       message_type=None, enum_type=None, containing_type=None,
@@ -150,28 +150,28 @@ _TABLE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=52,
-  serialized_end=183,
+  serialized_start=53,
+  serialized_end=186,
 )
 
 
 _STRINGREFMAP_MAPPINGENTRY = _descriptor.Descriptor(
   name='MappingEntry',
-  full_name='pydb.proto.StringRefMap.MappingEntry',
+  full_name='pytdb.proto.StringRefMap.MappingEntry',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
-      name='key', full_name='pydb.proto.StringRefMap.MappingEntry.key', index=0,
+      name='key', full_name='pytdb.proto.StringRefMap.MappingEntry.key', index=0,
       number=1, type=13, cpp_type=3, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='value', full_name='pydb.proto.StringRefMap.MappingEntry.value', index=1,
+      name='value', full_name='pytdb.proto.StringRefMap.MappingEntry.value', index=1,
       number=2, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=b"".decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
@@ -189,20 +189,20 @@ _STRINGREFMAP_MAPPINGENTRY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=257,
-  serialized_end=303,
+  serialized_start=261,
+  serialized_end=307,
 )
 
 _STRINGREFMAP = _descriptor.Descriptor(
   name='StringRefMap',
-  full_name='pydb.proto.StringRefMap',
+  full_name='pytdb.proto.StringRefMap',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
-      name='mapping', full_name='pydb.proto.StringRefMap.mapping', index=0,
+      name='mapping', full_name='pytdb.proto.StringRefMap.mapping', index=0,
       number=1, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
@@ -220,35 +220,35 @@ _STRINGREFMAP = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=185,
-  serialized_end=303,
+  serialized_start=188,
+  serialized_end=307,
 )
 
 
 _COLUMNSCHEMA = _descriptor.Descriptor(
   name='ColumnSchema',
-  full_name='pydb.proto.ColumnSchema',
+  full_name='pytdb.proto.ColumnSchema',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
-      name='name', full_name='pydb.proto.ColumnSchema.name', index=0,
+      name='name', full_name='pytdb.proto.ColumnSchema.name', index=0,
       number=1, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=b"".decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='type', full_name='pydb.proto.ColumnSchema.type', index=1,
+      name='type', full_name='pytdb.proto.ColumnSchema.type', index=1,
       number=2, type=14, cpp_type=8, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='width', full_name='pydb.proto.ColumnSchema.width', index=2,
+      name='width', full_name='pytdb.proto.ColumnSchema.width', index=2,
       number=3, type=13, cpp_type=3, label=1,
       has_default_value=True, default_value=1,
       message_type=None, enum_type=None, containing_type=None,
@@ -267,35 +267,35 @@ _COLUMNSCHEMA = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=306,
-  serialized_end=476,
+  serialized_start=310,
+  serialized_end=481,
 )
 
 
 _SCHEMA = _descriptor.Descriptor(
   name='Schema',
-  full_name='pydb.proto.Schema',
+  full_name='pytdb.proto.Schema',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
-      name='time_column', full_name='pydb.proto.Schema.time_column', index=0,
+      name='time_column', full_name='pytdb.proto.Schema.time_column', index=0,
       number=1, type=9, cpp_type=9, label=1,
       has_default_value=True, default_value=b"t".decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='tag_column', full_name='pydb.proto.Schema.tag_column', index=1,
+      name='tag_column', full_name='pytdb.proto.Schema.tag_column', index=1,
       number=2, type=9, cpp_type=9, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='value_column', full_name='pydb.proto.Schema.value_column', index=2,
+      name='value_column', full_name='pytdb.proto.Schema.value_column', index=2,
       number=3, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
@@ -313,28 +313,28 @@ _SCHEMA = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=478,
-  serialized_end=578,
+  serialized_start=483,
+  serialized_end=584,
 )
 
 
 _SUBTABLEID_TAGENTRY = _descriptor.Descriptor(
   name='TagEntry',
-  full_name='pydb.proto.SubTableId.TagEntry',
+  full_name='pytdb.proto.SubTableId.TagEntry',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
-      name='key', full_name='pydb.proto.SubTableId.TagEntry.key', index=0,
+      name='key', full_name='pytdb.proto.SubTableId.TagEntry.key', index=0,
       number=1, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=b"".decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='value', full_name='pydb.proto.SubTableId.TagEntry.value', index=1,
+      name='value', full_name='pytdb.proto.SubTableId.TagEntry.value', index=1,
       number=2, type=13, cpp_type=3, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
@@ -352,34 +352,34 @@ _SUBTABLEID_TAGENTRY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=670,
-  serialized_end=712,
+  serialized_start=677,
+  serialized_end=719,
 )
 
 _SUBTABLEID = _descriptor.Descriptor(
   name='SubTableId',
-  full_name='pydb.proto.SubTableId',
+  full_name='pytdb.proto.SubTableId',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
-      name='id', full_name='pydb.proto.SubTableId.id', index=0,
+      name='id', full_name='pytdb.proto.SubTableId.id', index=0,
       number=1, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=b"".decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='tag', full_name='pydb.proto.SubTableId.tag', index=1,
+      name='tag', full_name='pytdb.proto.SubTableId.tag', index=1,
       number=2, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='str_tag', full_name='pydb.proto.SubTableId.str_tag', index=2,
+      name='str_tag', full_name='pytdb.proto.SubTableId.str_tag', index=2,
       number=3, type=9, cpp_type=9, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
@@ -397,28 +397,28 @@ _SUBTABLEID = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=581,
-  serialized_end=712,
+  serialized_start=587,
+  serialized_end=719,
 )
 
 
 _SUBTABLE = _descriptor.Descriptor(
   name='SubTable',
-  full_name='pydb.proto.SubTable',
+  full_name='pytdb.proto.SubTable',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
-      name='id', full_name='pydb.proto.SubTable.id', index=0,
+      name='id', full_name='pytdb.proto.SubTable.id', index=0,
       number=1, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='index', full_name='pydb.proto.SubTable.index', index=1,
+      name='index', full_name='pytdb.proto.SubTable.index', index=1,
       number=2, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
@@ -436,42 +436,42 @@ _SUBTABLE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=714,
-  serialized_end=794,
+  serialized_start=721,
+  serialized_end=803,
 )
 
 
 _INDEX = _descriptor.Descriptor(
   name='Index',
-  full_name='pydb.proto.Index',
+  full_name='pytdb.proto.Index',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
-      name='value', full_name='pydb.proto.Index.value', index=0,
+      name='value', full_name='pytdb.proto.Index.value', index=0,
       number=1, type=3, cpp_type=2, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='pos', full_name='pydb.proto.Index.pos', index=1,
+      name='pos', full_name='pytdb.proto.Index.pos', index=1,
       number=2, type=3, cpp_type=2, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='last_ts', full_name='pydb.proto.Index.last_ts', index=2,
+      name='last_ts', full_name='pytdb.proto.Index.last_ts', index=2,
       number=3, type=3, cpp_type=2, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='num_rows', full_name='pydb.proto.Index.num_rows', index=3,
+      name='num_rows', full_name='pytdb.proto.Index.num_rows', index=3,
       number=4, type=4, cpp_type=4, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
@@ -489,49 +489,49 @@ _INDEX = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=796,
-  serialized_end=866,
+  serialized_start=805,
+  serialized_end=875,
 )
 
 
 _TIMESELECTOR = _descriptor.Descriptor(
   name='TimeSelector',
-  full_name='pydb.proto.TimeSelector',
+  full_name='pytdb.proto.TimeSelector',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
-      name='start', full_name='pydb.proto.TimeSelector.start', index=0,
+      name='start', full_name='pytdb.proto.TimeSelector.start', index=0,
       number=1, type=3, cpp_type=2, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='include_start', full_name='pydb.proto.TimeSelector.include_start', index=1,
+      name='include_start', full_name='pytdb.proto.TimeSelector.include_start', index=1,
       number=2, type=8, cpp_type=7, label=1,
       has_default_value=True, default_value=True,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='end', full_name='pydb.proto.TimeSelector.end', index=2,
+      name='end', full_name='pytdb.proto.TimeSelector.end', index=2,
       number=3, type=3, cpp_type=2, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='include_end', full_name='pydb.proto.TimeSelector.include_end', index=3,
+      name='include_end', full_name='pytdb.proto.TimeSelector.include_end', index=3,
       number=4, type=8, cpp_type=7, label=1,
       has_default_value=True, default_value=False,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='last_n', full_name='pydb.proto.TimeSelector.last_n', index=4,
+      name='last_n', full_name='pytdb.proto.TimeSelector.last_n', index=4,
       number=5, type=4, cpp_type=4, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
@@ -549,28 +549,28 @@ _TIMESELECTOR = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=868,
-  serialized_end=983,
+  serialized_start=877,
+  serialized_end=992,
 )
 
 
 _TAGSELECTOR = _descriptor.Descriptor(
   name='TagSelector',
-  full_name='pydb.proto.TagSelector',
+  full_name='pytdb.proto.TagSelector',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
-      name='name', full_name='pydb.proto.TagSelector.name', index=0,
+      name='name', full_name='pytdb.proto.TagSelector.name', index=0,
       number=1, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=b"".decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='value', full_name='pydb.proto.TagSelector.value', index=1,
+      name='value', full_name='pytdb.proto.TagSelector.value', index=1,
       number=2, type=9, cpp_type=9, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
@@ -588,28 +588,28 @@ _TAGSELECTOR = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=985,
-  serialized_end=1027,
+  serialized_start=994,
+  serialized_end=1036,
 )
 
 
 _SUBTABLESELECTOR = _descriptor.Descriptor(
   name='SubTableSelector',
-  full_name='pydb.proto.SubTableSelector',
+  full_name='pytdb.proto.SubTableSelector',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
-      name='tag_selector', full_name='pydb.proto.SubTableSelector.tag_selector', index=0,
+      name='tag_selector', full_name='pytdb.proto.SubTableSelector.tag_selector', index=0,
       number=1, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='tag_order', full_name='pydb.proto.SubTableSelector.tag_order', index=1,
+      name='tag_order', full_name='pytdb.proto.SubTableSelector.tag_order', index=1,
       number=4, type=9, cpp_type=9, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
@@ -627,35 +627,35 @@ _SUBTABLESELECTOR = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1029,
-  serialized_end=1113,
+  serialized_start=1038,
+  serialized_end=1123,
 )
 
 
 _SELECTOR = _descriptor.Descriptor(
   name='Selector',
-  full_name='pydb.proto.Selector',
+  full_name='pytdb.proto.Selector',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
-      name='sub_table_selector', full_name='pydb.proto.Selector.sub_table_selector', index=0,
+      name='sub_table_selector', full_name='pytdb.proto.Selector.sub_table_selector', index=0,
       number=1, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='time_selector', full_name='pydb.proto.Selector.time_selector', index=1,
+      name='time_selector', full_name='pytdb.proto.Selector.time_selector', index=1,
       number=2, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='column', full_name='pydb.proto.Selector.column', index=2,
+      name='column', full_name='pytdb.proto.Selector.column', index=2,
       number=3, type=9, cpp_type=9, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
@@ -673,28 +673,28 @@ _SELECTOR = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1116,
-  serialized_end=1249,
+  serialized_start=1126,
+  serialized_end=1261,
 )
 
 
 _QUERYRESULT_COLUMNBINARYDATAENTRY = _descriptor.Descriptor(
   name='ColumnBinaryDataEntry',
-  full_name='pydb.proto.QueryResult.ColumnBinaryDataEntry',
+  full_name='pytdb.proto.QueryResult.ColumnBinaryDataEntry',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
-      name='key', full_name='pydb.proto.QueryResult.ColumnBinaryDataEntry.key', index=0,
+      name='key', full_name='pytdb.proto.QueryResult.ColumnBinaryDataEntry.key', index=0,
       number=1, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=b"".decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='value', full_name='pydb.proto.QueryResult.ColumnBinaryDataEntry.value', index=1,
+      name='value', full_name='pytdb.proto.QueryResult.ColumnBinaryDataEntry.value', index=1,
       number=2, type=12, cpp_type=9, label=1,
       has_default_value=False, default_value=b"",
       message_type=None, enum_type=None, containing_type=None,
@@ -712,41 +712,41 @@ _QUERYRESULT_COLUMNBINARYDATAENTRY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1459,
-  serialized_end=1514,
+  serialized_start=1474,
+  serialized_end=1529,
 )
 
 _QUERYRESULT = _descriptor.Descriptor(
   name='QueryResult',
-  full_name='pydb.proto.QueryResult',
+  full_name='pytdb.proto.QueryResult',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
-      name='num_rows', full_name='pydb.proto.QueryResult.num_rows', index=0,
+      name='num_rows', full_name='pytdb.proto.QueryResult.num_rows', index=0,
       number=1, type=3, cpp_type=2, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='column_schema', full_name='pydb.proto.QueryResult.column_schema', index=1,
+      name='column_schema', full_name='pytdb.proto.QueryResult.column_schema', index=1,
       number=2, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='column_binary_data', full_name='pydb.proto.QueryResult.column_binary_data', index=2,
+      name='column_binary_data', full_name='pytdb.proto.QueryResult.column_binary_data', index=2,
       number=3, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='string_ref_map', full_name='pydb.proto.QueryResult.string_ref_map', index=3,
+      name='string_ref_map', full_name='pytdb.proto.QueryResult.string_ref_map', index=3,
       number=4, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
@@ -764,8 +764,8 @@ _QUERYRESULT = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1252,
-  serialized_end=1514,
+  serialized_start=1264,
+  serialized_end=1529,
 )
 
 _TABLE.fields_by_name['schema'].message_type = _SCHEMA
@@ -804,14 +804,14 @@ _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 Dummy = _reflection.GeneratedProtocolMessageType('Dummy', (_message.Message,), {
   'DESCRIPTOR' : _DUMMY,
   '__module__' : 'table_pb2'
-  # @@protoc_insertion_point(class_scope:pydb.proto.Dummy)
+  # @@protoc_insertion_point(class_scope:pytdb.proto.Dummy)
   })
 _sym_db.RegisterMessage(Dummy)
 
 Table = _reflection.GeneratedProtocolMessageType('Table', (_message.Message,), {
   'DESCRIPTOR' : _TABLE,
   '__module__' : 'table_pb2'
-  # @@protoc_insertion_point(class_scope:pydb.proto.Table)
+  # @@protoc_insertion_point(class_scope:pytdb.proto.Table)
   })
 _sym_db.RegisterMessage(Table)
 
@@ -820,12 +820,12 @@ StringRefMap = _reflection.GeneratedProtocolMessageType('StringRefMap', (_messag
   'MappingEntry' : _reflection.GeneratedProtocolMessageType('MappingEntry', (_message.Message,), {
     'DESCRIPTOR' : _STRINGREFMAP_MAPPINGENTRY,
     '__module__' : 'table_pb2'
-    # @@protoc_insertion_point(class_scope:pydb.proto.StringRefMap.MappingEntry)
+    # @@protoc_insertion_point(class_scope:pytdb.proto.StringRefMap.MappingEntry)
     })
   ,
   'DESCRIPTOR' : _STRINGREFMAP,
   '__module__' : 'table_pb2'
-  # @@protoc_insertion_point(class_scope:pydb.proto.StringRefMap)
+  # @@protoc_insertion_point(class_scope:pytdb.proto.StringRefMap)
   })
 _sym_db.RegisterMessage(StringRefMap)
 _sym_db.RegisterMessage(StringRefMap.MappingEntry)
@@ -833,14 +833,14 @@ _sym_db.RegisterMessage(StringRefMap.MappingEntry)
 ColumnSchema = _reflection.GeneratedProtocolMessageType('ColumnSchema', (_message.Message,), {
   'DESCRIPTOR' : _COLUMNSCHEMA,
   '__module__' : 'table_pb2'
-  # @@protoc_insertion_point(class_scope:pydb.proto.ColumnSchema)
+  # @@protoc_insertion_point(class_scope:pytdb.proto.ColumnSchema)
   })
 _sym_db.RegisterMessage(ColumnSchema)
 
 Schema = _reflection.GeneratedProtocolMessageType('Schema', (_message.Message,), {
   'DESCRIPTOR' : _SCHEMA,
   '__module__' : 'table_pb2'
-  # @@protoc_insertion_point(class_scope:pydb.proto.Schema)
+  # @@protoc_insertion_point(class_scope:pytdb.proto.Schema)
   })
 _sym_db.RegisterMessage(Schema)
 
@@ -849,12 +849,12 @@ SubTableId = _reflection.GeneratedProtocolMessageType('SubTableId', (_message.Me
   'TagEntry' : _reflection.GeneratedProtocolMessageType('TagEntry', (_message.Message,), {
     'DESCRIPTOR' : _SUBTABLEID_TAGENTRY,
     '__module__' : 'table_pb2'
-    # @@protoc_insertion_point(class_scope:pydb.proto.SubTableId.TagEntry)
+    # @@protoc_insertion_point(class_scope:pytdb.proto.SubTableId.TagEntry)
     })
   ,
   'DESCRIPTOR' : _SUBTABLEID,
   '__module__' : 'table_pb2'
-  # @@protoc_insertion_point(class_scope:pydb.proto.SubTableId)
+  # @@protoc_insertion_point(class_scope:pytdb.proto.SubTableId)
   })
 _sym_db.RegisterMessage(SubTableId)
 _sym_db.RegisterMessage(SubTableId.TagEntry)
@@ -862,42 +862,42 @@ _sym_db.RegisterMessage(SubTableId.TagEntry)
 SubTable = _reflection.GeneratedProtocolMessageType('SubTable', (_message.Message,), {
   'DESCRIPTOR' : _SUBTABLE,
   '__module__' : 'table_pb2'
-  # @@protoc_insertion_point(class_scope:pydb.proto.SubTable)
+  # @@protoc_insertion_point(class_scope:pytdb.proto.SubTable)
   })
 _sym_db.RegisterMessage(SubTable)
 
 Index = _reflection.GeneratedProtocolMessageType('Index', (_message.Message,), {
   'DESCRIPTOR' : _INDEX,
   '__module__' : 'table_pb2'
-  # @@protoc_insertion_point(class_scope:pydb.proto.Index)
+  # @@protoc_insertion_point(class_scope:pytdb.proto.Index)
   })
 _sym_db.RegisterMessage(Index)
 
 TimeSelector = _reflection.GeneratedProtocolMessageType('TimeSelector', (_message.Message,), {
   'DESCRIPTOR' : _TIMESELECTOR,
   '__module__' : 'table_pb2'
-  # @@protoc_insertion_point(class_scope:pydb.proto.TimeSelector)
+  # @@protoc_insertion_point(class_scope:pytdb.proto.TimeSelector)
   })
 _sym_db.RegisterMessage(TimeSelector)
 
 TagSelector = _reflection.GeneratedProtocolMessageType('TagSelector', (_message.Message,), {
   'DESCRIPTOR' : _TAGSELECTOR,
   '__module__' : 'table_pb2'
-  # @@protoc_insertion_point(class_scope:pydb.proto.TagSelector)
+  # @@protoc_insertion_point(class_scope:pytdb.proto.TagSelector)
   })
 _sym_db.RegisterMessage(TagSelector)
 
 SubTableSelector = _reflection.GeneratedProtocolMessageType('SubTableSelector', (_message.Message,), {
   'DESCRIPTOR' : _SUBTABLESELECTOR,
   '__module__' : 'table_pb2'
-  # @@protoc_insertion_point(class_scope:pydb.proto.SubTableSelector)
+  # @@protoc_insertion_point(class_scope:pytdb.proto.SubTableSelector)
   })
 _sym_db.RegisterMessage(SubTableSelector)
 
 Selector = _reflection.GeneratedProtocolMessageType('Selector', (_message.Message,), {
   'DESCRIPTOR' : _SELECTOR,
   '__module__' : 'table_pb2'
-  # @@protoc_insertion_point(class_scope:pydb.proto.Selector)
+  # @@protoc_insertion_point(class_scope:pytdb.proto.Selector)
   })
 _sym_db.RegisterMessage(Selector)
 
@@ -906,12 +906,12 @@ QueryResult = _reflection.GeneratedProtocolMessageType('QueryResult', (_message.
   'ColumnBinaryDataEntry' : _reflection.GeneratedProtocolMessageType('ColumnBinaryDataEntry', (_message.Message,), {
     'DESCRIPTOR' : _QUERYRESULT_COLUMNBINARYDATAENTRY,
     '__module__' : 'table_pb2'
-    # @@protoc_insertion_point(class_scope:pydb.proto.QueryResult.ColumnBinaryDataEntry)
+    # @@protoc_insertion_point(class_scope:pytdb.proto.QueryResult.ColumnBinaryDataEntry)
     })
   ,
   'DESCRIPTOR' : _QUERYRESULT,
   '__module__' : 'table_pb2'
-  # @@protoc_insertion_point(class_scope:pydb.proto.QueryResult)
+  # @@protoc_insertion_point(class_scope:pytdb.proto.QueryResult)
   })
 _sym_db.RegisterMessage(QueryResult)
 _sym_db.RegisterMessage(QueryResult.ColumnBinaryDataEntry)

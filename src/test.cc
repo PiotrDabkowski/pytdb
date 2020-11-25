@@ -207,7 +207,6 @@ TEST_F(TableTest, SubTableWorkflow) {
   sel.add_column("v");
 
   auto verify = [this, &sub2](const proto::Selector& selector, int32_t start, int32_t end) {
-    spdlog::info("Verifying query {}...", selector.DebugString());
     auto q_res = sub2.Query(selector);
     if (start == end) {
       EXPECT_FALSE(q_res);

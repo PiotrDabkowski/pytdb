@@ -64,14 +64,12 @@ print(find_packages())
 
 setup(
     name='pytdb_cc',
-    version='0.0.2',
+    version='0.0.5',
     author='Piotr Dabkowski',
     url='https://github.com/PiotrDabkowski/pytdb',
-    packages = ["src", "src.proto"],
     description='Wrapper over pytdb cc lib. A fast & minimalistic C++ time-series DB.',
     long_description='',
     ext_modules=[CMakeExtension('pytdb_cc')],
-
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
 )
