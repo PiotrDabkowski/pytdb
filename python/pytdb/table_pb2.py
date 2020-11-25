@@ -19,7 +19,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto2',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\x0btable.proto\x12\npydb.proto\"\x16\n\x05\x44ummy\x12\r\n\x05\x64ummy\x18\x01 \x01(\t\"\x83\x01\n\x05Table\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\"\n\x06schema\x18\x02 \x01(\x0b\x32\x12.pydb.proto.Schema\x12,\n\x0csub_table_id\x18\x04 \x03(\x0b\x32\x16.pydb.proto.SubTableId\x12\x1a\n\rindex_density\x18\x05 \x01(\x03:\x03\x32\x35\x36\"v\n\x0cStringRefMap\x12\x36\n\x07mapping\x18\x01 \x03(\x0b\x32%.pydb.proto.StringRefMap.MappingEntry\x1a.\n\x0cMappingEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\xaa\x01\n\x0c\x43olumnSchema\x12\x0c\n\x04name\x18\x01 \x01(\t\x12+\n\x04type\x18\x02 \x01(\x0e\x32\x1d.pydb.proto.ColumnSchema.Type\x12\x10\n\x05width\x18\x03 \x01(\r:\x01\x31\"M\n\x04Type\x12\t\n\x05\x46LOAT\x10\x00\x12\n\n\x06\x44OUBLE\x10\x01\x12\t\n\x05INT32\x10\x02\x12\t\n\x05INT64\x10\x03\x12\x08\n\x04\x42YTE\x10\x04\x12\x0e\n\nSTRING_REF\x10\x05\"d\n\x06Schema\x12\x16\n\x0btime_column\x18\x01 \x01(\t:\x01t\x12\x12\n\ntag_column\x18\x02 \x03(\t\x12.\n\x0cvalue_column\x18\x03 \x03(\x0b\x32\x18.pydb.proto.ColumnSchema\"\x83\x01\n\nSubTableId\x12\n\n\x02id\x18\x01 \x01(\t\x12,\n\x03tag\x18\x02 \x03(\x0b\x32\x1f.pydb.proto.SubTableId.TagEntry\x12\x0f\n\x07str_tag\x18\x03 \x03(\t\x1a*\n\x08TagEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\r:\x02\x38\x01\"P\n\x08SubTable\x12\"\n\x02id\x18\x01 \x01(\x0b\x32\x16.pydb.proto.SubTableId\x12 \n\x05index\x18\x02 \x01(\x0b\x32\x11.pydb.proto.Index\"F\n\x05Index\x12\r\n\x05value\x18\x01 \x03(\x03\x12\x0b\n\x03pos\x18\x02 \x03(\x03\x12\x0f\n\x07last_ts\x18\x03 \x01(\x03\x12\x10\n\x08num_rows\x18\x04 \x01(\x04\"c\n\x0cTimeSelector\x12\r\n\x05start\x18\x01 \x01(\x03\x12\x1b\n\rinclude_start\x18\x02 \x01(\x08:\x04true\x12\x0b\n\x03\x65nd\x18\x03 \x01(\x03\x12\x1a\n\x0binclude_end\x18\x04 \x01(\x08:\x05\x66\x61lse\"*\n\x0bTagSelector\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x03(\t\"T\n\x10SubTableSelector\x12-\n\x0ctag_selector\x18\x01 \x03(\x0b\x32\x17.pydb.proto.TagSelector\x12\x11\n\ttag_order\x18\x04 \x03(\t\"\x85\x01\n\x08Selector\x12\x38\n\x12sub_table_selector\x18\x01 \x01(\x0b\x32\x1c.pydb.proto.SubTableSelector\x12/\n\rtime_selector\x18\x02 \x01(\x0b\x32\x18.pydb.proto.TimeSelector\x12\x0e\n\x06\x63olumn\x18\x03 \x03(\t\"\x86\x02\n\x0bQueryResult\x12\x10\n\x08num_rows\x18\x01 \x01(\x03\x12/\n\rcolumn_schema\x18\x02 \x03(\x0b\x32\x18.pydb.proto.ColumnSchema\x12I\n\x12\x63olumn_binary_data\x18\x03 \x03(\x0b\x32-.pydb.proto.QueryResult.ColumnBinaryDataEntry\x12\x30\n\x0estring_ref_map\x18\x04 \x01(\x0b\x32\x18.pydb.proto.StringRefMap\x1a\x37\n\x15\x43olumnBinaryDataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x0c:\x02\x38\x01'
+  serialized_pb=b'\n\x0btable.proto\x12\npydb.proto\"\x16\n\x05\x44ummy\x12\r\n\x05\x64ummy\x18\x01 \x01(\t\"\x83\x01\n\x05Table\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\"\n\x06schema\x18\x02 \x01(\x0b\x32\x12.pydb.proto.Schema\x12,\n\x0csub_table_id\x18\x04 \x03(\x0b\x32\x16.pydb.proto.SubTableId\x12\x1a\n\rindex_density\x18\x05 \x01(\x03:\x03\x32\x35\x36\"v\n\x0cStringRefMap\x12\x36\n\x07mapping\x18\x01 \x03(\x0b\x32%.pydb.proto.StringRefMap.MappingEntry\x1a.\n\x0cMappingEntry\x12\x0b\n\x03key\x18\x01 \x01(\r\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\xaa\x01\n\x0c\x43olumnSchema\x12\x0c\n\x04name\x18\x01 \x01(\t\x12+\n\x04type\x18\x02 \x01(\x0e\x32\x1d.pydb.proto.ColumnSchema.Type\x12\x10\n\x05width\x18\x03 \x01(\r:\x01\x31\"M\n\x04Type\x12\t\n\x05\x46LOAT\x10\x00\x12\n\n\x06\x44OUBLE\x10\x01\x12\t\n\x05INT32\x10\x02\x12\t\n\x05INT64\x10\x03\x12\x08\n\x04\x42YTE\x10\x04\x12\x0e\n\nSTRING_REF\x10\x05\"d\n\x06Schema\x12\x16\n\x0btime_column\x18\x01 \x01(\t:\x01t\x12\x12\n\ntag_column\x18\x02 \x03(\t\x12.\n\x0cvalue_column\x18\x03 \x03(\x0b\x32\x18.pydb.proto.ColumnSchema\"\x83\x01\n\nSubTableId\x12\n\n\x02id\x18\x01 \x01(\t\x12,\n\x03tag\x18\x02 \x03(\x0b\x32\x1f.pydb.proto.SubTableId.TagEntry\x12\x0f\n\x07str_tag\x18\x03 \x03(\t\x1a*\n\x08TagEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\r:\x02\x38\x01\"P\n\x08SubTable\x12\"\n\x02id\x18\x01 \x01(\x0b\x32\x16.pydb.proto.SubTableId\x12 \n\x05index\x18\x02 \x01(\x0b\x32\x11.pydb.proto.Index\"F\n\x05Index\x12\r\n\x05value\x18\x01 \x03(\x03\x12\x0b\n\x03pos\x18\x02 \x03(\x03\x12\x0f\n\x07last_ts\x18\x03 \x01(\x03\x12\x10\n\x08num_rows\x18\x04 \x01(\x04\"s\n\x0cTimeSelector\x12\r\n\x05start\x18\x01 \x01(\x03\x12\x1b\n\rinclude_start\x18\x02 \x01(\x08:\x04true\x12\x0b\n\x03\x65nd\x18\x03 \x01(\x03\x12\x1a\n\x0binclude_end\x18\x04 \x01(\x08:\x05\x66\x61lse\x12\x0e\n\x06last_n\x18\x05 \x01(\x04\"*\n\x0bTagSelector\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x03(\t\"T\n\x10SubTableSelector\x12-\n\x0ctag_selector\x18\x01 \x03(\x0b\x32\x17.pydb.proto.TagSelector\x12\x11\n\ttag_order\x18\x04 \x03(\t\"\x85\x01\n\x08Selector\x12\x38\n\x12sub_table_selector\x18\x01 \x01(\x0b\x32\x1c.pydb.proto.SubTableSelector\x12/\n\rtime_selector\x18\x02 \x01(\x0b\x32\x18.pydb.proto.TimeSelector\x12\x0e\n\x06\x63olumn\x18\x03 \x03(\t\"\x86\x02\n\x0bQueryResult\x12\x10\n\x08num_rows\x18\x01 \x01(\x03\x12/\n\rcolumn_schema\x18\x02 \x03(\x0b\x32\x18.pydb.proto.ColumnSchema\x12I\n\x12\x63olumn_binary_data\x18\x03 \x03(\x0b\x32-.pydb.proto.QueryResult.ColumnBinaryDataEntry\x12\x30\n\x0estring_ref_map\x18\x04 \x01(\x0b\x32\x18.pydb.proto.StringRefMap\x1a\x37\n\x15\x43olumnBinaryDataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x0c:\x02\x38\x01'
 )
 
 
@@ -530,6 +530,13 @@ _TIMESELECTOR = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='last_n', full_name='pydb.proto.TimeSelector.last_n', index=4,
+      number=5, type=4, cpp_type=4, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
   ],
   extensions=[
   ],
@@ -543,7 +550,7 @@ _TIMESELECTOR = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=868,
-  serialized_end=967,
+  serialized_end=983,
 )
 
 
@@ -581,8 +588,8 @@ _TAGSELECTOR = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=969,
-  serialized_end=1011,
+  serialized_start=985,
+  serialized_end=1027,
 )
 
 
@@ -620,8 +627,8 @@ _SUBTABLESELECTOR = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1013,
-  serialized_end=1097,
+  serialized_start=1029,
+  serialized_end=1113,
 )
 
 
@@ -666,8 +673,8 @@ _SELECTOR = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1100,
-  serialized_end=1233,
+  serialized_start=1116,
+  serialized_end=1249,
 )
 
 
@@ -705,8 +712,8 @@ _QUERYRESULT_COLUMNBINARYDATAENTRY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1443,
-  serialized_end=1498,
+  serialized_start=1459,
+  serialized_end=1514,
 )
 
 _QUERYRESULT = _descriptor.Descriptor(
@@ -757,8 +764,8 @@ _QUERYRESULT = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1236,
-  serialized_end=1498,
+  serialized_start=1252,
+  serialized_end=1514,
 )
 
 _TABLE.fields_by_name['schema'].message_type = _SCHEMA

@@ -5,14 +5,14 @@ import pandas as pd
 import numpy as np
 
 # The wrappers over cc library are a separate module, compiled separately.
-import pydb_cc
+import pytdb_cc
 # The pb should be also compiled separately...
 from . import table_pb2
 import time
 
 DT_STR_REF = np.dtype("uint32")
 
-AppendDataMode = pydb_cc.AppendDataMode
+AppendDataMode = pytdb_cc.AppendDataMode
 
 class Table:
     def __init__(self, db_root_dir, table_name: str, time_column: str = None,
@@ -34,7 +34,7 @@ class Table:
         else:
             self.config = None
 
-        self.table = pydb_cc.Table(self.table_path,
+        self.table = pytdb_cc.Table(self.table_path,
                                   self.config.SerializeToString() if self.config is not None else None)
         self._update_config()
         self.columns = self._get_columns_from_schema(self.config.schema)
@@ -65,13 +65,14 @@ class Table:
             self.config = table_pb2.Table()
         self.config.ParseFromString(self.table.get_meta_wire())
 
-    def _make_query_selector(self, time_start, time_end, include_start, include_end,
+    def _make_query_selector(self, time_start, time_end, include_start, include_end, last_n,
                              columns, tag_column_order, **tag_selectors):
         selector = table_pb2.Selector(column=columns if columns is not None else self.columns,
                                       time_selector=table_pb2.TimeSelector(start=self._to_ns64(time_start) if time_start else None,
                                                                            end=self._to_ns64(time_end) if time_end else None,
                                                                            include_start=include_start,
-                                                                           include_end=include_end),
+                                                                           include_end=include_end,
+                                                                           last_n=last_n),
                                       )
         sub_selector = selector.sub_table_selector
         if tag_column_order is not None:
@@ -90,11 +91,11 @@ class Table:
                 value] if isinstance(value, str) else value))
         return selector
 
-    def query(self, time_start=None, time_end=None, include_start=True, include_end=False,
+    def query(self, time_start=None, time_end=None, include_start=True, include_end=False, last_n=None,
                  columns: Optional[List[str]] = None, resolve_strings=True,
                  tag_column_order: Optional[List[str]] = None,
                  **tag_selectors) -> Dict[str, np.ndarray]:
-        selector = self._make_query_selector(time_start, time_end, include_start, include_end,
+        selector = self._make_query_selector(time_start, time_end, include_start, include_end, last_n,
                              columns, tag_column_order, **tag_selectors)
         return self._query(selector, resolve_strings)
 
@@ -116,7 +117,7 @@ class Table:
         if arr.dtype != DT_STR_REF:
             raise ValueError("Returned tag column does not have a str_ref type!")
         # Just like np.unique but 10x faster for a large number of dups, and comparable otherwise.
-        unique_refs, inverse = pydb_cc.fast_unique(arr)
+        unique_refs, inverse = pytdb_cc.fast_unique(arr)
         return np.array(self.table.resolve_str_refs(unique_refs, throw_if_not_found=True), dtype=np.dtype("object"))[inverse]
 
     def _encode_str_ref_column(self, arr: np.ndarray) -> np.ndarray:
@@ -126,11 +127,11 @@ class Table:
         unique_strs, inverse = np.unique(arr, return_inverse=True)
         return np.array(self.table.mint_str_refs([str(e) for e in unique_strs]), dtype=DT_STR_REF)[inverse]
 
-    def query_df(self, time_start=None, time_end=None, include_start=True, include_end=False,
+    def query_df(self, time_start=None, time_end=None, include_start=True, include_end=False, last_n=None,
                  columns: Optional[List[str]] = None, resolve_strings=True,
                  tag_column_order: Optional[List[str]] = None,
                  **tag_selectors) -> pd.DataFrame:
-        selector = self._make_query_selector(time_start, time_end, include_start, include_end,
+        selector = self._make_query_selector(time_start, time_end, include_start, include_end, last_n,
                                              columns, tag_column_order, **tag_selectors)
         response = self._query(selector, resolve_strings)
         if not response:

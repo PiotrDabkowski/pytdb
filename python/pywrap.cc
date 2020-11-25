@@ -14,10 +14,6 @@ namespace py = pybind11;
 
 using PyColumns = std::unordered_map<std::string, py::array>;
 
-int add(int i, int j) {
-  return i + j;
-}
-
 std::string show() {
   pydb::proto::Table table;
   table.set_name("chuj");
@@ -175,13 +171,6 @@ py::tuple FastUnique(const py::array_t<T>& arr) {
   std::vector<ssize_t> vals_shape = {static_cast<ssize_t>(vals.size())};
   std::vector<ssize_t> inv_shape = {static_cast<ssize_t>(size)};
   return py::make_tuple(MakeNpArray(vals_shape, unique_elems_buf), MakeNpArray(inv_shape, inv));
-}
-
-int check(const std::optional<std::string>& x) {
-  if (!x) {
-    return -11;
-  }
-  return x->size();
 }
 
 template<typename T>
@@ -411,13 +400,8 @@ class TableWrap {
 };
 
 PYBIND11_MODULE(pydb_cc, m) {
-  m.def("add", &add, R"pbdoc(
-        Add two numbers
-        Some other explanation about the add function.
-    )pbdoc");
-
   m.def("show", &show);
-  m.def("check", &check);
+  // Just like np.unique but 10x faster for a large number of dups, and comparable otherwise.
   m.def("fast_unique", &FastUnique<uint32_t, uint32_t>);
   m.def("bundle_table", &BundleTable, py::arg("table_data"), py::arg("valid_indicators"), py::arg("indicators"), py::arg("features"));
 

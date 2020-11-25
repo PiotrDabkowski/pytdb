@@ -461,15 +461,22 @@ class SubTable {
 
   std::pair<Span, RawColumnData> QueryTimeSpan(const proto::TimeSelector& time_selector,
                                                bool return_time_column) const {
+    const std::string& time_column_name = table_meta_.schema().time_column();
+    if (time_selector.has_last_n()) {
+      const Span selected_span = {index_.num_rows -  std::min(time_selector.last_n(), index_.num_rows), index_.num_rows};
+      return {
+          selected_span,
+          ReadRawColumnSingle(column_meta_.at(time_column_name), selected_span)
+      };
+    }
+
     Span coarse_span = QueryCoarseTimeSpanFromIndex(time_selector);
     spdlog::debug("coarse query_span is {}->{}", coarse_span.first, coarse_span.second);
 
     if (coarse_span.first >= coarse_span.second) {
       return {kEmptySpan, {}};
     }
-    RawColumnData
-        raw_coarse_time =
-        ReadRawColumnSingle(column_meta_.at(table_meta_.schema().time_column()), coarse_span);
+    RawColumnData raw_coarse_time = ReadRawColumnSingle(column_meta_.at(time_column_name), coarse_span);
     auto* coarse_time = reinterpret_cast<int64_t*>(raw_coarse_time.data);
     const size_t num_rows = coarse_span.second - coarse_span.first;
     GOOGLE_CHECK_EQ(raw_coarse_time.size, sizeof(int64_t) * num_rows);

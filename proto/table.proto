@@ -71,6 +71,9 @@ message TimeSelector {
     optional bool include_start = 2 [default = true];
     optional int64 end = 3;
     optional bool include_end = 4 [default = false];
+    // Returns up to last_n rows with the most recent timestamp. Exclusive with other fields, if
+    // provided other selector fields will be ignored.
+    optional uint64 last_n = 5;
 }
 
 message TagSelector {

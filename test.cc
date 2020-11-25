@@ -333,6 +333,13 @@ TEST_F(TableTest, SubTableWorkflow) {
   t_sel->set_start(1600);
   t_sel->set_end(2010);
   verify(sel, 1600, 2000);
+
+  t_sel->set_last_n(11);
+  verify(sel, 2000-11, 2000);
+
+  t_sel->set_last_n(110000);
+  verify(sel, 0, 2000);
+
 }
 
 TEST_F(TableTest, TableWorkflow) {

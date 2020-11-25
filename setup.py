@@ -61,13 +61,13 @@ class CMakeBuild(build_ext):
         subprocess.check_call(['cmake', '--build', '.'] + build_args, cwd=self.build_temp)
 
 setup(
-    name='pydb_cc',
+    name='pytdb_cc',
     version='0.0.1',
     author='Piotr Dabkowski',
     author_email='piodrus@gmail.com',
-    description='Wrapper over pydb cc lib.',
+    description='Wrapper over pytdb cc lib.',
     long_description='',
-    ext_modules=[CMakeExtension('pydb_cc')],
+    ext_modules=[CMakeExtension('pytdb_cc')],
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
 )
