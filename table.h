@@ -17,12 +17,7 @@
 #include "spdlog/spdlog.h"
 #include "proto/table.pb.h"
 
-namespace pydb {
-
-//class MemoryTable {
-//
-//};
-//
+namespace pytdb {
 
 class TableWrap;
 
@@ -1024,6 +1019,6 @@ class Table {
 
 };
 
-} // namespace pydb
+} // namespace pytdb
 
 

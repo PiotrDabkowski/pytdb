@@ -167,30 +167,3 @@ class Table:
                 # Value column.
                 converted_columns[column_name] = maybe_convert_column(value, np.dtype("float32"))
         self.table.append_data(converted_columns, append_data_mode)
-
-
-
-
-
-# df = table.query_df(columns=["t"])
-# s = time.perf_counter()
-# r = pd.Timestamp(2014)
-# print(r.dtype)
-# print(time.perf_counter() - s)
-# # table.mint_str_refs(list(map(str, range(1000))))
-# for e in range(1, 100):
-#     try:
-#         table.append_data({
-#             "t": np.arange(100000, 1000000).astype(np.int64),
-#             "s": np.ones(900000).astype(np.uint32) * e,
-#             "c": np.arange(100000, 1000000).astype(np.float32) / 10,
-#         })
-#         print(e)
-#     except:
-#         print("Data already in.")
-#         break
-# #
-# # while 1:
-# #     sel = table_pb2.Selector(column=["t", "s", "c"])
-# #     sel.sub_table_selector.tag_selector.append(table_pb2.TagSelector(name="s", value=["1", "2"]))
-# #     table.query(sel.SerializeToString())

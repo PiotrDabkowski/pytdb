@@ -1,6 +1,6 @@
 #include "table.h"
 
-namespace pydb {
+namespace pytdb {
 
 
 
@@ -84,4 +84,4 @@ size_t c_lower_bound(const int64_t* start, const int64_t* end, int64_t value) {
   return diff;
 }
 
-} // namespace pydb
+} // namespace pytdb

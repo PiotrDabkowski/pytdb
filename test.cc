@@ -7,7 +7,7 @@
 #include "table.h"
 #include "proto/table.pb.h"
 
-namespace pydb {
+namespace pytdb {
 namespace {
 
 using ::testing::UnorderedElementsAre;
@@ -108,7 +108,6 @@ class TableTest : public testing::Test {
         tmp_dir_path{std::filesystem::temp_directory_path() /= std::tmpnam(nullptr)};
     EXPECT_TRUE(std::filesystem::create_directories(tmp_dir_path));
     root_dir_ = tmp_dir_path.string();
-//    root_dir_ = "/Users/piter/CLionProjects/PyDB/mock";
     std::filesystem::remove_all(root_dir_);
   }
 
@@ -141,7 +140,7 @@ std::vector<T> Range(int32_t start, int32_t end) {
 }
 
 TEST_F(TableTest, SubTableWorkflow) {
-  pydb::proto::Table config;
+  proto::Table config;
   config.set_index_density(256);
 
   auto* schema = config.mutable_schema();
@@ -149,7 +148,7 @@ TEST_F(TableTest, SubTableWorkflow) {
   schema->add_tag_column("s");
   auto* vc = schema->add_value_column();
   vc->set_name("v");
-  vc->set_type(pydb::proto::ColumnSchema::FLOAT);
+  vc->set_type(proto::ColumnSchema::FLOAT);
 
   Table table(root_dir_, config);
   auto sub_id = table.MakeSubTableId({{"s", "GOOG"}});
@@ -343,7 +342,7 @@ TEST_F(TableTest, SubTableWorkflow) {
 }
 
 TEST_F(TableTest, TableWorkflow) {
-  pydb::proto::Table config;
+  proto::Table config;
   config.set_index_density(256);
 
   auto* schema = config.mutable_schema();
@@ -352,7 +351,7 @@ TEST_F(TableTest, TableWorkflow) {
   schema->add_tag_column("c");
   auto* vc = schema->add_value_column();
   vc->set_name("v");
-  vc->set_type(pydb::proto::ColumnSchema::FLOAT);
+  vc->set_type(proto::ColumnSchema::FLOAT);
 
   Table tmp_table(root_dir_, config);
   EXPECT_EQ(tmp_table.GetMeta().SerializeAsString(), config.SerializeAsString());
@@ -493,4 +492,4 @@ TEST_F(TableTest, TableWorkflow) {
 
 
 }  // namespace
-}  // pydb
+}  // pytdb

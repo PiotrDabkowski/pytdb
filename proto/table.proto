@@ -1,6 +1,6 @@
 syntax = "proto2";
 
-package pydb.proto;
+package pytdb.proto;
 
 message Dummy {
     optional string dummy = 1;

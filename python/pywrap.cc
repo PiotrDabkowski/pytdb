@@ -7,7 +7,7 @@
 #include "proto/table.pb.h"
 #include "../table.h"
 
-namespace pydb {
+namespace pytdb {
 namespace {
 
 namespace py = pybind11;
@@ -15,7 +15,7 @@ namespace py = pybind11;
 using PyColumns = std::unordered_map<std::string, py::array>;
 
 std::string show() {
-  pydb::proto::Table table;
+  proto::Table table;
   table.set_name("chuj");
   return table.DebugString();
 }
@@ -399,7 +399,7 @@ class TableWrap {
 
 };
 
-PYBIND11_MODULE(pydb_cc, m) {
+PYBIND11_MODULE(pytdb_cc, m) {
   m.def("show", &show);
   // Just like np.unique but 10x faster for a large number of dups, and comparable otherwise.
   m.def("fast_unique", &FastUnique<uint32_t, uint32_t>);
@@ -430,4 +430,4 @@ PYBIND11_MODULE(pydb_cc, m) {
 }
 
 }  // namespace
-}  // namespace pydb
+}  // namespace pytdb

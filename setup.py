@@ -4,7 +4,7 @@ import sys
 import platform
 import subprocess
 
-from setuptools import setup, Extension
+from setuptools import setup, Extension, find_packages
 from setuptools.command.build_ext import build_ext
 from distutils.version import LooseVersion
 
@@ -60,14 +60,21 @@ class CMakeBuild(build_ext):
         subprocess.check_call(['cmake', ext.sourcedir] + cmake_args, cwd=self.build_temp, env=env)
         subprocess.check_call(['cmake', '--build', '.'] + build_args, cwd=self.build_temp)
 
+print(find_packages())
+
 setup(
     name='pytdb_cc',
-    version='0.0.1',
+    version='0.0.2',
     author='Piotr Dabkowski',
     author_email='piodrus@gmail.com',
     description='Wrapper over pytdb cc lib.',
+    packages=["python"],
     long_description='',
     ext_modules=[CMakeExtension('pytdb_cc')],
+    package_data={
+        "pydb_cc": ["CMakeLists.txt", "table.cc", "table.h", "test.cc"]
+
+    },
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
 )
