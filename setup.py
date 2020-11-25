@@ -66,15 +66,12 @@ setup(
     name='pytdb_cc',
     version='0.0.2',
     author='Piotr Dabkowski',
-    author_email='piodrus@gmail.com',
-    description='Wrapper over pytdb cc lib.',
-    packages=["python"],
+    url='https://github.com/PiotrDabkowski/pytdb',
+    packages = ["src", "src.proto"],
+    description='Wrapper over pytdb cc lib. A fast & minimalistic C++ time-series DB.',
     long_description='',
     ext_modules=[CMakeExtension('pytdb_cc')],
-    package_data={
-        "pydb_cc": ["CMakeLists.txt", "table.cc", "table.h", "test.cc"]
 
-    },
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
 )
