@@ -15,9 +15,12 @@ if(UNIX AND NOT APPLE)
     set(LINUX_EXTRA_LIBS "stdc++fs")
 endif()
 
+
 add_subdirectory(abseil-cpp)
 add_subdirectory(googletest)
 add_subdirectory(pybind11)
+
+#enable_testing()
 
 add_subdirectory(src)
 

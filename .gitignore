@@ -6,6 +6,10 @@
 googletest
 abseil-cpp
 pybind11
+wheelhouse
+
+CMakeFiles
+CMakeCache.txt
 
 Bench*
 bench*
