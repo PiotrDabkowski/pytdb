@@ -16,11 +16,11 @@ rm -f -R /parentfs/wheelhouse/*
 mkdir -p /parentfs/wheelhouse
 # --------------------------------------------------------------------------------------------------
 # Main wheel build script, performed on $PLATFORM OS.
-yum install  autoconf automake libtool curl make cmake gcc-c++ unzip wget -y
+yum install autoconf automake libtool curl make cmake gcc-c++ unzip wget -y
 
 # Install protobuf.
+#yum install protobuf-compiler -y
 wget https://github.com/protocolbuffers/protobuf/releases/download/v3.14.0/protobuf-cpp-3.14.0.tar.gz
-
 tar -zxvf protobuf-cpp-3.14.0.tar.gz
 cd protobuf-3.14.0 || exit 1
 ./autogen.sh

@@ -60,11 +60,9 @@ class CMakeBuild(build_ext):
         subprocess.check_call(['cmake', ext.sourcedir] + cmake_args, cwd=self.build_temp, env=env)
         subprocess.check_call(['cmake', '--build', '.'] + build_args, cwd=self.build_temp)
 
-print(find_packages())
-
 setup(
     name='pytdb_cc',
-    version='0.0.5',
+    version='0.0.6',
     author='Piotr Dabkowski',
     url='https://github.com/PiotrDabkowski/pytdb',
     description='Wrapper over pytdb cc lib. A fast & minimalistic C++ time-series DB.',

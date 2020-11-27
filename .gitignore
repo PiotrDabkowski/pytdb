@@ -8,9 +8,6 @@ abseil-cpp
 pybind11
 wheelhouse
 
-CMakeFiles
-CMakeCache.txt
-
 Bench*
 bench*
 
@@ -85,6 +82,11 @@ bench*
 
 # CMake
 cmake-build-*/
+CMakeFiles
+CMakeCache.txt
+cmake*
+CTest*
+Makefile
 
 # Mongo Explorer plugin
 .idea/**/mongoSettings.xml
@@ -329,3 +331,4 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
+*.cbp

@@ -432,7 +432,7 @@ class SubTable {
     }
 
     for (const auto& tag_column : table_meta_.schema().tag_column()) {
-      GOOGLE_CHECK(meta_.id().tag().contains(tag_column))
+      GOOGLE_CHECK(meta_.id().tag().count(tag_column) > 0)
               << "Tag for column not found in sub table id specification: " << tag_column << " "
               << meta_.id().DebugString();
       column_meta_[tag_column] = ColumnMeta{
