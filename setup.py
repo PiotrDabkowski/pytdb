@@ -62,7 +62,7 @@ class CMakeBuild(build_ext):
 
 setup(
     name='pytdb_cc',
-    version='0.0.6',
+    version='0.0.7',
     author='Piotr Dabkowski',
     url='https://github.com/PiotrDabkowski/pytdb',
     description='Wrapper over pytdb cc lib. A fast & minimalistic C++ time-series DB.',

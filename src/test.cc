@@ -101,6 +101,16 @@ std::vector<T> ToVector(RawColumnData* raw_column) {
   return result;
 }
 
+template<typename T>
+std::vector<T> Range(int32_t start, int32_t end) {
+  std::vector<T> res;
+  EXPECT_GE(end, start);
+  for (int32_t i = start; i < end; ++i) {
+    res.push_back(i);
+  }
+  return res;
+}
+
 class TableTest : public testing::Test {
  protected:
   void SetUp() override {
@@ -109,6 +119,36 @@ class TableTest : public testing::Test {
     EXPECT_TRUE(std::filesystem::create_directories(tmp_dir_path));
     root_dir_ = tmp_dir_path.string();
     std::filesystem::remove_all(root_dir_);
+  }
+
+  proto::Table GetTSVConfig(size_t index_density = 256) {
+    proto::Table config;
+    config.set_index_density(index_density);
+
+    auto* schema = config.mutable_schema();
+    schema->set_time_column("t");
+    schema->add_tag_column("s");
+    auto* vc = schema->add_value_column();
+    vc->set_name("v");
+    vc->set_type(proto::ColumnSchema::FLOAT);
+    return config;
+  }
+
+  void CheckTSVQuery(const SubTable& tsv_sub_table,
+                     const proto::Selector& selector,
+                     int32_t start,
+                     int32_t end,
+                     uint32_t sub_table_id = 1) {
+    auto q_res = tsv_sub_table.Query(selector);
+    if (start >= end) {
+      EXPECT_FALSE(q_res);
+      return;
+    }
+    EXPECT_TRUE(q_res);
+    EXPECT_EQ(q_res->size(), 3);
+    CheckColumn(*q_res, "t", Range<int64_t>(start, end));
+    CheckColumn(*q_res, "s", std::vector<uint32_t>(end - start, sub_table_id));
+    CheckColumn(*q_res, "v", Range<float>(start, end));
   }
 
   void TearDown() override {
@@ -129,39 +169,21 @@ class TableTest : public testing::Test {
 
 };
 
-template<typename T>
-std::vector<T> Range(int32_t start, int32_t end) {
-  std::vector<T> res;
-  EXPECT_GE(end, start);
-  for (int32_t i = start; i < end; ++i) {
-    res.push_back(i);
-  }
-  return res;
-}
 
-TEST_F(TableTest, SubTableWorkflow) {
-  proto::Table config;
-  config.set_index_density(256);
 
-  auto* schema = config.mutable_schema();
-  schema->set_time_column("t");
-  schema->add_tag_column("s");
-  auto* vc = schema->add_value_column();
-  vc->set_name("v");
-  vc->set_type(proto::ColumnSchema::FLOAT);
-
+TEST_F(TableTest, SubTableId) {
+  proto::Table config = GetTSVConfig();
   Table table(root_dir_, config);
   auto sub_id = table.MakeSubTableId({{"s", "GOOG"}});
   EXPECT_EQ(sub_id.id(), "sub,s=GOOG");
   EXPECT_EQ(sub_id.tag().at("s"), 1);
   EXPECT_EQ(sub_id.str_tag(0), "GOOG");
+}
 
-  SubTable sub(root_dir_, config, sub_id);
-
-  proto::Selector sel;
-  sel.add_column("t");
-  sel.add_column("s");
-  EXPECT_FALSE(sub.Query(sel));
+TEST_F(TableTest, SingleAppendDataAndIndex) {
+  proto::Table config = GetTSVConfig();
+  Table table(root_dir_, config);
+  SubTable sub(root_dir_, config, table.MakeSubTableId({{"s", "GOOG"}}));
 
   size_t rows = 1000;
   auto times = Range<int64_t>(0, rows);
@@ -175,6 +197,231 @@ TEST_F(TableTest, SubTableWorkflow) {
   // Throw on out of order data.
   EXPECT_THROW(sub.AppendData({{"t", FromVector(&times)}, {"v", FromVector(&values)}}),
                std::invalid_argument);
+}
+
+TEST_F(TableTest, AppendPersistence) {
+  proto::Table config = GetTSVConfig();
+  Table table(root_dir_, config);
+  auto sub_id = table.MakeSubTableId({{"s", "GOOG"}});
+  SubTable sub(root_dir_, config, sub_id);
+
+  size_t rows = 1000;
+  auto times = Range<int64_t>(0, rows);
+  auto values = Range<float>(0, rows);
+
+  sub.AppendData({{"t", FromVector(&times)}, {"v", FromVector(&values)}});
+
+  SubTable sub2(root_dir_, config, sub_id);
+  EXPECT_THAT(sub2.GetIndex().pos, ElementsAre(0, 256, 512, 768));
+  EXPECT_EQ(sub2.GetIndex().last_ts, rows - 1);
+  EXPECT_EQ(sub2.GetIndex().num_rows, rows);
+}
+
+TEST_F(TableTest, RejectOutOfOrder) {
+  proto::Table config = GetTSVConfig();
+  Table table(root_dir_, config);
+  SubTable sub(root_dir_, config, table.MakeSubTableId({{"s", "GOOG"}}));
+
+  size_t rows = 1000;
+  auto times = Range<int64_t>(0, rows);
+  auto values = Range<float>(0, rows);
+
+  sub.AppendData({{"t", FromVector(&times)}, {"v", FromVector(&values)}});
+
+  // Throw on out of order data.
+  EXPECT_THROW(sub.AppendData({{"t", FromVector(&times)}, {"v", FromVector(&values)}}),
+               std::invalid_argument);
+
+  // Data unchanged.
+  EXPECT_THAT(sub.GetIndex().pos, ElementsAre(0, 256, 512, 768));
+  EXPECT_EQ(sub.GetIndex().last_ts, rows - 1);
+  EXPECT_EQ(sub.GetIndex().num_rows, rows);
+}
+
+TEST_F(TableTest, RejectOutOfOrderFullRollback) {
+  proto::Table config = GetTSVConfig();
+  Table table(root_dir_, config);
+  auto sub_id = table.MakeSubTableId({{"s", "GOOG"}});
+  SubTable sub(root_dir_, config, sub_id);
+
+  size_t rows = 1000;
+  auto times = Range<int64_t>(0, rows);
+  auto values = Range<float>(0, rows);
+  sub.AppendData({{"t", FromVector(&times)}, {"v", FromVector(&values)}});
+
+  size_t new_rows = 5000;
+  auto times2 = Range<int64_t>(rows, rows + new_rows);
+  auto values2 = Range<float>(rows, rows + new_rows);
+  // Insert a single OOO item at the end.
+  times2.push_back(times2.back() - 1);
+  values2.push_back(times2.back() + 1);
+
+  // Throw on out of order data.
+  EXPECT_THROW(sub.AppendData({{"t", FromVector(&times)}, {"v", FromVector(&values)}}),
+               std::invalid_argument);
+
+  // Data unchanged, this case is tricky as we needed to do the full rollback because data until the last row has
+  // been already inserted.
+  EXPECT_THAT(sub.GetIndex().pos, ElementsAre(0, 256, 512, 768));
+  EXPECT_EQ(sub.GetIndex().last_ts, rows - 1);
+  EXPECT_EQ(sub.GetIndex().num_rows, rows);
+
+  // Check if nothing has been committed to the filesystem.
+  SubTable sub2(root_dir_, config, sub_id);
+  EXPECT_THAT(sub2.GetIndex().pos, ElementsAre(0, 256, 512, 768));
+  EXPECT_EQ(sub2.GetIndex().last_ts, rows - 1);
+  EXPECT_EQ(sub2.GetIndex().num_rows, rows);
+}
+
+TEST_F(TableTest, MultipleAppends) {
+  proto::Table config = GetTSVConfig();
+  Table table(root_dir_, config);
+  SubTable sub(root_dir_, config, table.MakeSubTableId({{"s", "GOOG"}}));
+
+  size_t rows = 1000;
+  auto times = Range<int64_t>(0, rows);
+  auto values = Range<float>(0, rows);
+  sub.AppendData({{"t", FromVector(&times)}, {"v", FromVector(&values)}});
+  // Throw on out of order data.
+  EXPECT_THROW(sub.AppendData({{"t", FromVector(&times)}, {"v", FromVector(&values)}}),
+               std::invalid_argument);
+
+  size_t new_rows = 900;
+  auto times2 = Range<int64_t>(rows, rows + new_rows);
+  auto values2 = Range<float>(rows, rows + new_rows);
+  rows += new_rows;
+
+  sub.AppendData({{"t", FromVector(&times2)}, {"v", FromVector(&values2)}});
+  EXPECT_THAT(sub.GetIndex().pos, ElementsAre(0, 256, 512, 768, 1024, 1280, 1536, 1792));
+  EXPECT_EQ(sub.GetIndex().last_ts, rows - 1);
+  EXPECT_EQ(sub.GetIndex().num_rows, rows);
+}
+
+TEST_F(TableTest, AppendTruncateExistingMode) {
+  proto::Table config = GetTSVConfig();
+  Table table(root_dir_, config);
+  auto sub_id = table.MakeSubTableId({{"s", "GOOG"}});
+  SubTable sub(root_dir_, config, sub_id);
+
+  auto times = Range<int64_t>(0, 1000);
+  auto values = Range<float>(0, 1000);
+
+  sub.AppendData({{"t", FromVector(&times)}, {"v", FromVector(&values)}});
+
+
+  auto times2 = Range<int64_t>(500, 1025);
+  auto values2 = Range<float>(500, 1025);
+  sub.AppendData({{"t", FromVector(&times2)}, {"v", FromVector(&values2)}}, AppendDataMode::kTruncateExisting);
+
+  EXPECT_THAT(sub.GetIndex().pos, ElementsAre(0, 256, 512));
+  EXPECT_EQ(sub.GetIndex().last_ts, 1024);
+  EXPECT_EQ(sub.GetIndex().num_rows, 525);
+
+  proto::Selector sel;
+  sel.add_column("t");
+  sel.add_column("s");
+  sel.add_column("v");
+  CheckTSVQuery(sub, sel, 500, 1025);
+
+  // Double check if everything has been committed.
+  SubTable sub2(root_dir_, config, sub_id);
+  CheckTSVQuery(sub2, sel, 500, 1025);
+  EXPECT_THAT(sub2.GetIndex().pos, ElementsAre(0, 256, 512));
+  EXPECT_EQ(sub2.GetIndex().last_ts, 1024);
+  EXPECT_EQ(sub2.GetIndex().num_rows, 525);
+}
+
+TEST_F(TableTest, AppendSkipOverlapMode) {
+  proto::Table config = GetTSVConfig();
+  Table table(root_dir_, config);
+  auto sub_id = table.MakeSubTableId({{"s", "GOOG"}});
+  SubTable sub(root_dir_, config, sub_id);
+
+  size_t rows = 1000;
+  auto times = Range<int64_t>(0, rows);
+  auto values = Range<float>(0, rows);
+
+  sub.AppendData({{"t", FromVector(&times)}, {"v", FromVector(&values)}});
+
+  size_t overlap = 500;
+  size_t rows2 = 525;
+  size_t total_rows = rows + rows2 - overlap;
+  auto times2 = Range<int64_t>(rows - overlap, total_rows);
+  auto values2 = Range<float>(rows - overlap, total_rows);
+  sub.AppendData({{"t", FromVector(&times2)}, {"v", FromVector(&values2)}}, AppendDataMode::kSkipOverlap);
+
+  EXPECT_THAT(sub.GetIndex().pos, ElementsAre(0, 256, 512, 768, 1024));
+  EXPECT_EQ(sub.GetIndex().last_ts, total_rows - 1);
+  EXPECT_EQ(sub.GetIndex().num_rows, total_rows);
+
+  proto::Selector sel;
+  sel.add_column("t");
+  sel.add_column("s");
+  sel.add_column("v");
+  CheckTSVQuery(sub, sel, 0, 1025);
+
+  // Double check if everything has been committed.
+  SubTable sub2(root_dir_, config, sub_id);
+  CheckTSVQuery(sub2, sel, 0, 1025);
+  EXPECT_THAT(sub2.GetIndex().pos, ElementsAre(0, 256, 512, 768, 1024));
+  EXPECT_EQ(sub2.GetIndex().last_ts, total_rows - 1);
+  EXPECT_EQ(sub2.GetIndex().num_rows, total_rows);
+}
+
+TEST_F(TableTest, AppendTruncateExistingOverlapMode) {
+  proto::Table config = GetTSVConfig();
+  Table table(root_dir_, config);
+  auto sub_id = table.MakeSubTableId({{"s", "GOOG"}});
+  SubTable sub(root_dir_, config, sub_id);
+
+  size_t rows = 1000;
+  auto times = Range<int64_t>(0, rows);
+  auto values = Range<float>(0, rows);
+
+  sub.AppendData({{"t", FromVector(&times)}, {"v", FromVector(&values)}});
+
+  size_t overlap = 500;
+  size_t rows2 = 525;
+  size_t total_rows = rows + rows2 - overlap;
+  auto times2 = Range<int64_t>(rows - overlap, total_rows);
+  auto values2 = Range<float>(rows - overlap, total_rows);
+  sub.AppendData({{"t", FromVector(&times2)}, {"v", FromVector(&values2)}}, AppendDataMode::kTruncateExistingOverlap);
+
+  EXPECT_THAT(sub.GetIndex().pos, ElementsAre(0, 256, 512, 768, 1024));
+  EXPECT_EQ(sub.GetIndex().last_ts, total_rows - 1);
+  EXPECT_EQ(sub.GetIndex().num_rows, total_rows);
+
+  proto::Selector sel;
+  sel.add_column("t");
+  sel.add_column("s");
+  sel.add_column("v");
+  CheckTSVQuery(sub, sel, 0, 1025);
+
+  // Double check if everything has been committed.
+  SubTable sub2(root_dir_, config, sub_id);
+  CheckTSVQuery(sub2, sel, 0, 1025);
+  EXPECT_THAT(sub2.GetIndex().pos, ElementsAre(0, 256, 512, 768, 1024));
+  EXPECT_EQ(sub2.GetIndex().last_ts, total_rows - 1);
+  EXPECT_EQ(sub2.GetIndex().num_rows, total_rows);
+}
+
+TEST_F(TableTest, Querying) {
+  proto::Table config = GetTSVConfig();
+  Table table(root_dir_, config);
+  auto sub_id = table.MakeSubTableId({{"s", "GOOG"}});
+  SubTable sub(root_dir_, config, sub_id);
+
+  proto::Selector sel;
+  sel.add_column("t");
+  sel.add_column("s");
+  // Empty table.
+  EXPECT_FALSE(sub.Query(sel));
+
+  size_t rows = 1000;
+  auto times = Range<int64_t>(0, rows);
+  auto values = Range<float>(0, rows);
+
+  sub.AppendData({{"t", FromVector(&times)}, {"v", FromVector(&values)}});
 
   auto result = sub.Query(sel);
   EXPECT_TRUE(result);
@@ -186,11 +433,7 @@ TEST_F(TableTest, SubTableWorkflow) {
   auto times2 = Range<int64_t>(rows, rows + new_rows);
   auto values2 = Range<float>(rows, rows + new_rows);
   rows += new_rows;
-
   sub.AppendData({{"t", FromVector(&times2)}, {"v", FromVector(&values2)}});
-  EXPECT_THAT(sub.GetIndex().pos, ElementsAre(0, 256, 512, 768, 1024, 1280, 1536, 1792));
-  EXPECT_EQ(sub.GetIndex().last_ts, rows - 1);
-  EXPECT_EQ(sub.GetIndex().num_rows, rows);
 
   result = sub.Query(sel);
   EXPECT_TRUE(result);
@@ -200,144 +443,151 @@ TEST_F(TableTest, SubTableWorkflow) {
 
   // Read the table from scratch and check it still works.
   SubTable sub2(root_dir_, config, sub_id);
-  EXPECT_THAT(sub2.GetIndex().pos, ElementsAre(0, 256, 512, 768, 1024, 1280, 1536, 1792));
-  EXPECT_EQ(sub2.GetIndex().last_ts, rows - 1);
-  EXPECT_EQ(sub2.GetIndex().num_rows, rows);
-
   sel.add_column("v");
 
-  auto verify = [this, &sub2](const proto::Selector& selector, int32_t start, int32_t end) {
-    auto q_res = sub2.Query(selector);
-    if (start == end) {
-      EXPECT_FALSE(q_res);
-      return;
-    }
-    EXPECT_TRUE(q_res);
-    EXPECT_EQ(q_res->size(), 3);
-    this->CheckColumn(*q_res, "t", Range<int64_t>(start, end));
-    this->CheckColumn(*q_res, "s", std::vector<uint32_t>(end - start, 1));
-    this->CheckColumn(*q_res, "v", Range<float>(start, end));
-  };
-
-  verify(sel, 0, 2000);
+  CheckTSVQuery(sub2, sel, 0, 2000);
 
   auto* t_sel = sel.mutable_time_selector();
 
   t_sel->set_start(11);
-  verify(sel, 11, 2000);
+  CheckTSVQuery(sub2, sel, 11, 2000);
 
   t_sel->set_start(-11);
-  verify(sel, 0, 2000);
+  CheckTSVQuery(sub2, sel, 0, 2000);
 
   t_sel->set_start(2000);
-  verify(sel, 0, 0);
+  CheckTSVQuery(sub2, sel, 0, 0);
 
   t_sel->set_start(1200);
-  verify(sel, 1200, 2000);
+  CheckTSVQuery(sub2, sel, 1200, 2000);
 
   t_sel->set_start(1999);
-  verify(sel, 1999, 2000);
+  CheckTSVQuery(sub2, sel, 1999, 2000);
 
   t_sel->set_include_start(false);
-  verify(sel, 0, 0);
+  CheckTSVQuery(sub2, sel, 0, 0);
 
   t_sel->set_start(-1);
-  verify(sel, 0, 2000);
+  CheckTSVQuery(sub2, sel, 0, 2000);
 
   t_sel->set_start(0);
-  verify(sel, 1, 2000);
+  CheckTSVQuery(sub2, sel, 1, 2000);
 
   t_sel->set_start(1200);
-  verify(sel, 1201, 2000);
+  CheckTSVQuery(sub2, sel, 1201, 2000);
 
   t_sel->set_include_start(true);
 
   t_sel->set_start(1200);
   t_sel->set_end(1205);
-  verify(sel, 1200, 1205);
+  CheckTSVQuery(sub2, sel, 1200, 1205);
 
   t_sel->set_start(900);
   t_sel->set_end(1705);
-  verify(sel, 900, 1705);
+  CheckTSVQuery(sub2, sel, 900, 1705);
 
   t_sel->set_start(1990);
   t_sel->set_end(1995);
-  verify(sel, 1990, 1995);
+  CheckTSVQuery(sub2, sel, 1990, 1995);
 
   t_sel->set_start(1000);
   t_sel->set_end(20040);
-  verify(sel, 1000, 2000);
+  CheckTSVQuery(sub2, sel, 1000, 2000);
 
   t_sel->set_start(1);
   t_sel->set_end(5);
-  verify(sel, 1, 5);
+  CheckTSVQuery(sub2, sel, 1, 5);
 
   t_sel->set_include_end(true);
   t_sel->set_start(1);
   t_sel->set_end(5);
-  verify(sel, 1, 6);
+  CheckTSVQuery(sub2, sel, 1, 6);
 
   t_sel->set_start(1);
   t_sel->set_end(1);
-  verify(sel, 1, 2);
+  CheckTSVQuery(sub2, sel, 1, 2);
 
   t_sel->set_start(0);
   t_sel->set_end(1999);
-  verify(sel, 0, 2000);
+  CheckTSVQuery(sub2, sel, 0, 2000);
 
   t_sel->set_include_start(false);
   t_sel->set_start(0);
   t_sel->set_end(1999);
   t_sel->set_include_end(false);
-  verify(sel, 1, 1999);
+  CheckTSVQuery(sub2, sel, 1, 1999);
 
   t_sel->set_include_start(false);
   t_sel->set_start(5);
   t_sel->set_end(5);
   t_sel->set_include_end(true);
-  verify(sel, 0, 0);
+  CheckTSVQuery(sub2, sel, 0, 0);
 
   t_sel->set_include_start(true);
   t_sel->set_start(5);
   t_sel->set_end(5);
   t_sel->set_include_end(false);
-  verify(sel, 0, 0);
+  CheckTSVQuery(sub2, sel, 0, 0);
 
   t_sel->set_start(50);
   t_sel->set_end(5);
-  verify(sel, 0, 0);
+  CheckTSVQuery(sub2, sel, 0, 0);
 
   t_sel->set_start(2000);
   t_sel->set_end(2001);
-  verify(sel, 0, 0);
+  CheckTSVQuery(sub2, sel, 0, 0);
 
   t_sel->set_start(-10);
   t_sel->set_end(0);
-  verify(sel, 0, 0);
+  CheckTSVQuery(sub2, sel, 0, 0);
 
   t_sel->set_start(-10);
   t_sel->set_end(0);
   t_sel->set_include_end(true);
-  verify(sel, 0, 1);
+  CheckTSVQuery(sub2, sel, 0, 1);
 
   t_sel->set_start(0);
   t_sel->set_end(0);
-  verify(sel, 0, 1);
+  CheckTSVQuery(sub2, sel, 0, 1);
 
   t_sel->set_start(1);
   t_sel->set_end(0);
-  verify(sel, 0, 0);
+  CheckTSVQuery(sub2, sel, 0, 0);
 
   t_sel->set_start(1600);
   t_sel->set_end(2010);
-  verify(sel, 1600, 2000);
+  CheckTSVQuery(sub2, sel, 1600, 2000);
 
   t_sel->set_last_n(11);
-  verify(sel, 2000-11, 2000);
+  CheckTSVQuery(sub2, sel, 2000 - 11, 2000);
 
   t_sel->set_last_n(110000);
-  verify(sel, 0, 2000);
+  CheckTSVQuery(sub2, sel, 0, 2000);
+}
 
+TEST_F(TableTest, AppendSkipOverlap) {
+  proto::Table config = GetTSVConfig();
+  Table table(root_dir_, config);
+  auto sub_id = table.MakeSubTableId({{"s", "GOOG"}});
+  SubTable sub(root_dir_, config, table.MakeSubTableId({{"s", "GOOG"}}));
+
+  size_t rows = 1000;
+  auto times = Range<int64_t>(0, rows);
+  auto values = Range<float>(0, rows);
+  sub.AppendData({{"t", FromVector(&times)}, {"v", FromVector(&values)}});
+  // Throw on out of order data.
+  EXPECT_THROW(sub.AppendData({{"t", FromVector(&times)}, {"v", FromVector(&values)}}),
+               std::invalid_argument);
+
+  size_t new_rows = 900;
+  auto times2 = Range<int64_t>(rows, rows + new_rows);
+  auto values2 = Range<float>(rows, rows + new_rows);
+  rows += new_rows;
+
+  sub.AppendData({{"t", FromVector(&times2)}, {"v", FromVector(&values2)}});
+  EXPECT_THAT(sub.GetIndex().pos, ElementsAre(0, 256, 512, 768, 1024, 1280, 1536, 1792));
+  EXPECT_EQ(sub.GetIndex().last_ts, rows - 1);
+  EXPECT_EQ(sub.GetIndex().num_rows, rows);
 }
 
 TEST_F(TableTest, TableWorkflow) {
@@ -481,14 +731,13 @@ TEST_F(TableTest, TableWorkflow) {
   time_sel->set_include_end(true);
 
   check_res(tmp_table5.Query(sel), TableData{
-      .t = {2,3,4},
-      .s = {1,1,1},
-      .c = {2,2,2},
-      .v = {2,1,3},
+      .t = {2, 3, 4},
+      .s = {1, 1, 1},
+      .c = {2, 2, 2},
+      .v = {2, 1, 3},
   });
 
 }
-
 
 }  // namespace
 }  // pytdb

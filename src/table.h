@@ -137,7 +137,12 @@ size_t GetTypeSize(proto::ColumnSchema::Type type);
 enum AppendDataMode {
   kAppend,
   kTruncateExisting,
+  // Assume the table has 1,2,3 and we are inserting 2,3,4, the 2,3 is considered an overlap.
+  // In kTruncateExistingOverlap mode, all timestamps >= 2 will be removed from the database,
+  // afterwards we insert the provided rows in full.
   kTruncateExistingOverlap,
+  // Assume the table has 1,2,3 and we are inserting 2,3,4, the 2,3 is considered an overlap.
+  // In kSkipOverlap mode, rows with timestamp 2 and 3 will be ignored, and we will only insert row 4.
   kSkipOverlap,
 };
 
@@ -217,7 +222,7 @@ class SubTable {
     }
     auto* time = reinterpret_cast<int64_t*>(time_column.data);
 
-    if (append_mode == kTruncateExistingOverlap && time[0] >= index_.last_ts) {
+    if (append_mode == kTruncateExistingOverlap && time[0] <= index_.last_ts) {
       proto::TimeSelector time_selector;
       // Get the position of the element equal to the first time value of the appended column_data.
       time_selector.set_start(time[0]);
@@ -248,6 +253,10 @@ class SubTable {
             index_.last_ts,
             time[i],
             append_mode));
+      }
+      if (append_mode == kSkipOverlap && !num_accepted_rows && time[i] == index_.last_ts) {
+        // Also skip equal time rows.
+        continue;
       }
       index_.last_ts = time[i];
       if (index_.num_rows % index_density == 0) {
